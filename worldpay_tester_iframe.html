@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Form</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        form {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- INITIATE DDC -->
+    <form id="paymentForm" onsubmit="handleSubmit(event)">
+        <!-- <label for="cardName">Cardholder Name</label>
+        <input type="text" id="cardName" name="cardName" value="3DS" required> -->
+
+        <label for="cardNumber">Card Number</label>
+        <input type="number" id="cardNumber" name="cardNumber" value="4000000000001091" required>
+
+        <!-- <label for="expiryDate">Expiry Date (MM/YY)</label>
+        <input type="text" id="expiryDate" name="expiryDate" placeholder="MM/YY" maxlength="5" value="12/26" required>
+
+        <label for="cvv">CVV</label>
+        <input type="number" id="cvv" name="cvv" value="555" required> -->
+
+        <input type="submit" id="payButton" value="Submit DDC">
+    </form>
+
+    <iframe id="ddcIframe" src="device_data_collection.html" width="400" height="300" frameborder="0" style="display: none;"></iframe>
+
+    <h1>DDC RESPONSE</h1>
+    <label for="ddcSessionId">SessionId:</label>
+    <input type="text" id="ddcSessionId" readonly><br><br>
+
+    <label for="ddcMessageType">MessageType:</label>
+    <input type="text" id="ddcMessageType" readonly><br><br>
+
+    <label for="ddcStatus">Status:</label>
+    <input type="text" id="ddcStatus" readonly><br><br>
+
+
+
+    <!-- 3DS CHALLENGE FORM -->
+    <h1>CHALLENGE FORM</h1>
+    <iframe id="challengeIframe" src="challenge.html" width="400" height="300" frameborder="0"></iframe>
+    <form id="challengeForm" onsubmit="handleChallengeSubmit(event)">
+        <label for="orderCode">Order Code</label>
+        <input type="text" id="orderCode" name="orderCode" required>
+
+        <input type="submit" id="challengeButton" value="Submit Challenge">
+    </form>
+
+
+    <script>
+        window.addEventListener("message", function (event) {
+            console.log("postMessage");
+            if (event.origin === "https://centinelapistag.cardinalcommerce.com") {
+                var data = JSON.parse(event.data);
+                console.log('Merchant received a message:', data);
+                if (data !== undefined && data.Status) {
+                    document.getElementById('ddcSessionId').value = data.SessionId;
+                    document.getElementById('ddcMessageType').value = data.MessageType;
+                    document.getElementById('ddcStatus').value = data.Status;
+                }
+            }
+        }, false);
+
+        function handleSubmit(event) {
+            event.preventDefault(); // Prevent the form from submitting normally
+            console.log("handleSubmit");
+
+            // var cardName = document.getElementById('cardName').value;
+            var cardNumber = document.getElementById('cardNumber').value;
+            // var expiryDate = document.getElementById('expiryDate').value;
+            // var cvv = document.getElementById('cvv').value;
+
+            // Log form values to console
+            // console.log('Cardholder Name:', cardName);
+            console.log('Card Number:', cardNumber);
+            // console.log('Expiry Date:', expiryDate);
+            // console.log('CVV:', cvv);
+
+            populateDdcIframe();
+        }
+
+        function handleChallengeSubmit(event) {
+            event.preventDefault();
+            console.log("handleChallengeSubmit");
+
+            var orderCode = document.getElementById('orderCode').value;
+            console.log('Order Code:', orderCode);
+
+            populateChallengeIframe();
+        }
+
+        function populateChallengeIframe() {
+            var childFrame = document.getElementById('challengeIframe').contentWindow;
+            var orderCode = document.getElementById('orderCode').value;
+            // sandbox
+            var payload =
+            {
+                "jti": generateUUID(),
+                "iat": generateEpochTimestamp(),
+                "iss": "65310a27241d9f5ee4eabc28",
+                "OrgUnitId": "65310a272ea8fe5867da56b0",
+                "ReturnUrl": "http://localhost:8080/adapters/wp/webhooks/return-url",
+                "Payload": {
+                    "ACSUrl": "https://1merchantacsstag.cardinalcommerce.com/MerchantACSWeb/creq.jsp",
+                    "Payload": "eyJtZXNzYWdlVHlwZSI6IkNSZXEiLCJtZXNzYWdlVmVyc2lvbiI6IjIuMS4wIiwidGhyZWVEU1NlcnZlclRyYW5zSUQiOiI1YjE1ZGFjMS1kNDljLTQ3MzQtODFmNi0zYjk4OTQyNDE5MTIiLCJhY3NUcmFuc0lEIjoiY2Y5ZjViODAtYzc5Ny00YzEzLWE4ZmItMzVkNjFiMTdhYjdjIiwiY2hhbGxlbmdlV2luZG93U2l6ZSI6IjAyIn0"
+                },
+                "ObjectifyPayload": true
+            };
+            var jwt = generateJwt(payload)
+            var data = { jwt: jwt, md: orderCode };
+            childFrame.postMessage(data, '*');
+        }
+
+
+        function populateDdcIframe() {
+            var childFrame = document.getElementById('ddcIframe').contentWindow;
+            var cardNumber = document.getElementById('cardNumber').value;
+            var payload = {
+                "jti": generateUUID(),
+                "iat": generateEpochTimestamp(),
+                "iss": "65310a27241d9f5ee4eabc28",
+                "OrgUnitId": "65310a272ea8fe5867da56b0"
+                };
+            var jwt = generateJwt(payload);
+            var data = { bin: cardNumber, jwt: jwt };
+            childFrame.postMessage(data, '*');
+        }
+
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                var r = Math.random() * 16 | 0,
+                    v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        function generateEpochTimestamp() {
+            var currentTime = new Date().getTime();
+            return Math.floor(currentTime / 1000);
+        }
+
+        function base64url(source) {
+            let encodedSource = CryptoJS.enc.Base64.stringify(source);
+            encodedSource = encodedSource.replace(/\+/g, '-').replace(/\//g, '_').replace(/\=+$/, '');
+            return encodedSource;
+        }
+
+        function generateJwt(payload) {
+            var header = {
+                "alg": "HS256",
+                "typ": "JWT"
+            };
+
+            var encodedHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));
+            var encodedPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));
+
+            var signature = encodedHeader + "." + encodedPayload;
+
+            var secret = "716b7b91-2042-435f-852c-4fffa94e294b"; // sandbox
+
+            var hash = CryptoJS.HmacSHA256(signature, secret);
+            var signatureBase64url = base64url(hash);
+
+            console.log("encodedHeader:", encodedHeader);
+            console.log("encodedPayload:", encodedPayload);
+            console.log("JWT Signature:", signatureBase64url);
+            return encodedHeader + "." + encodedPayload + "." + signatureBase64url;
+        }
+    </script>
+
+</body>
+</html>

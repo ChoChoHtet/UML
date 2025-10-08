@@ -1,0 +1,124 @@
+@startuml
+autonumber
+title Legacy Refund Sandbox
+participant p as "Partner"
+participant tc as "TC"
+participant mock as "Mock Adapter"
+participant legacy as "Pay legacy"
+
+p -> tc++: /refunds
+note right
+{
+             "txn_id": "7048556161851903652",
+             "customer_email": "test@gmail.com"
+}
+end note
+group validate refunds
+tc -> legacy++ : /api/restful/v1.0/Payment/inquiryPaymentResult
+return response
+end
+alt fail validation case
+tc --> p++: HTTP 404:BAD REQUEST
+note right
+{
+    "errors": [
+        {
+            "message": "Transaction is not applicable for refund"
+        }
+    ],
+    "status": 400,
+    "title": "LegacyRefundTransactionNotValid"
+}
+end note
+else  success validation case
+     tc  --> p: status_code="accepted"
+     note right
+     {
+         "id": "rfl_sg191274647e30000",
+         "created_at": "2024-08-06T10:40:03.043811Z",
+         "status_code": "accepted",
+         "finalized_at": null,
+         "type": "full",
+         "txn_id": "7229401532041990000",
+         "amount_value": "1000",
+         "amount_currency": null,
+         "customer_email": "hello@gmail.com"
+     }
+     end note
+     tc -> p: send webhook notification (status_code=accepted)
+     p --> tc: HTTP 202: ACCEPTED
+     note right
+     {
+       "id": "evt_sg1912752788c0035",
+       "owned_by": "par_sg18a219e3c410000",
+       "created_at": 1722941601.932746015,
+       "type": "legacy_refund.created",
+       "data_id": "rfl_sg1912752787e0001",
+       "data": {
+         "id": "rfl_sg1912752787e0001",
+         "owned_by": "par_sg18a219e3c410000",
+         "created_by": "par_sg18a219e3c410000",
+         "created_at": 1722941601.918132452,
+         "status_code": "accepted",
+         "txn_id": "7229415512311412763",
+         "type": "full",
+         "amount_value": "1000",
+         "customer_email": "hello@gmail.com"
+       }
+     }
+     end note
+     alt "customer_email = success@gmail.com"
+    tc -> mock: mock_function()
+    return status_code=""succeeded"
+    note right
+    {
+        "id": "rfl_sg191274647e30000",
+        "created_at": "2024-08-06T10:40:03.043811Z",
+        "status_code": "succeeded",
+        "finalized_at": "2024-08-06T10:44:24.437290Z",
+        "type": "full",
+        "txn_id": "7229401532041990000",
+        "amount_value": "1000",
+        "amount_currency": null,
+        "customer_email": "success@gmail.com"
+    }
+    end note
+    tc -> p: send webhook notification (status_code=succeeded)
+    p --> tc: HTTP 202: ACCEPTED
+    else group "customer_email= fail@gmail.com"
+    tc -> mock: mock_function()
+    tc --> p: status_code=""failed"
+    note right
+        {
+            "id": "rfl_sg191274647e30000",
+            "created_at": "2024-08-06T10:40:03.043811Z",
+            "status_code": "failed",
+            "finalized_at": "2024-08-06T10:44:24.437290Z",
+            "type": "full",
+            "txn_id": "7229401532041990000",
+            "amount_value": "1000",
+            "amount_currency": null,
+            "customer_email": "failed@gmail.com"
+        }
+        end note
+    tc -> p: send webhook notification (status_code=failed)
+    p --> tc: HTTP 202: ACCEPTED
+     end group
+end
+p->tc:/refunds/{refund.id}
+tc -> mock: mock_function()
+mock--> p: 200 OK
+note right
+{
+    "id": "rfl_sg191274647e30000",
+    "created_at": "2024-08-06T10:40:03.043811Z",
+    "status_code": "accepted",
+    "finalized_at": null,
+    "type": "full",
+    "txn_id": "7229401532041990000",
+    "amount_value": "1000",
+    "amount_currency": null,
+    "customer_email": "hello@gmail.com"
+}
+end note
+@enduml

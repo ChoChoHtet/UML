@@ -1,0 +1,72 @@
+{
+  "id": "chg_sg18d9baa29670004",
+  "created_at": "2024-02-12T04:53:56.711470Z",
+  "status_code": "waiting_for_shopper_action",
+  "item_code": "item-123",
+  "item_name": "Item 123",
+  "amount_value": "1099",
+  "amount_currency": "USD",
+  "partner_reference": "partner-reference-123",
+  "shopper_action": {
+    "id": "csa_sg18fc9d862380000",
+    "type": "form",
+    "redirection": {
+      "id": "car_sg18fc9d862390000",
+      "method": "POST",
+      "url": "https://3ds_challenge",
+      "inputs": [
+        {
+          "name": "JWT",
+          "value": "eyJhbGciOiJI...",
+          "type": "hidden"
+        },
+        {
+          "name": "MD",
+          "value": "chg_sg18fc9d862330000",
+          "type": "hidden"
+        }
+      ]
+    }
+  },
+  "shopper_agent": {
+    "ip_address": "192.168.0.1",
+    "user_agent": "Mozilla/5.0..",
+    "timezone": "300",
+    "screen_height": 864,
+    "screen_width": 1536,
+    "colour_depth": 24,
+    "accept_header": "text/html"
+  },
+  "setting": {
+    "default_language": "en",
+    "partner_webhook_url": "https://mymerchant.org/success",
+    "card": {
+      "pre_capture_ack_url": "https://mymerchant.org/capture",
+      "capture_grace_period": 0,
+      "3ds_challenge_window_size": "390x400"
+    }
+  },
+  "token": {
+    "id": "tkn_sgoar7wtr8owgo",
+    "type": "not_required",
+    "status_code": "not_required",
+    "payment_method": {
+      "id": "pmt_augeriowuyvw",
+      "type": "card",
+      "card": {
+        "country_code": "US",
+        "number": "42424242424242",
+        "holder_name": "John Doe",
+        "expiry_month": "12",
+        "expiry_date": "30",
+        "csc": "123"
+      },
+      "shopper": {
+        "id": "shp_kajgrfowuyrew84y56",
+        "zip_code":"98104",
+        "email": "johndoe@gmail.com",
+        "status_code": "active"
+      }
+    }
+  }
+}

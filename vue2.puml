@@ -1,0 +1,102 @@
+@startuml Codapay Client Redirection Flow
+!theme plain
+
+actor User
+participant Browser
+participant "Index Page" as IndexPage
+participant "Begin Page" as BeginPage
+participant "Pay Client API" as PayClient
+participant "HCState Handler" as HCState
+participant "UI Store" as UIStore
+participant "Payment Provider" as PaymentProvider
+participant "UI Sections" as Sections
+
+User -> Browser: Navigate to payment URL
+Browser -> IndexPage: Load index.vue
+IndexPage -> BeginPage: Redirect to /begin with query params\n(txn_id, host_url, client_type, etc.)
+
+BeginPage -> PayClient: getTxnDetails(txnId, hostUrl, clientType)
+PayClient --> BeginPage: Transaction details + HCState
+
+BeginPage -> UIStore: Store transaction details,\nset theme and locale
+
+alt HCState contains client actions
+    BeginPage -> HCState: handleHc(hcResult)
+
+    alt Action Type: Form
+        HCState -> UIStore: Configure form fields\n(dob, cpf, full-name)
+        HCState -> Sections: Show checkout section
+        Sections --> User: Display checkout form
+        User -> Sections: Submit form data
+        Sections -> HCState: handleCheckoutSubmit(formData)
+        HCState -> PayClient: createPayment(checkoutUrl, formData)
+
+    else Action Type: Auto Redirection
+        HCState -> UIStore: Store redirection action
+        HCState -> Sections: Show waiting section
+        HCState -> PaymentProvider: Auto redirect to payment URL
+        User -> PaymentProvider: Complete payment on external site
+
+    else Action Type: Button Redirection
+        HCState -> Sections: Show checkout with continue button
+        User -> Sections: Click continue to payment
+        Sections -> HCState: handleRedirectAction()
+        HCState -> PaymentProvider: Open payment URL in new window
+
+    else Action Type: QR Code
+        HCState -> Sections: Show waiting section with QR code
+        Sections --> User: Display QR code for mobile payment
+        User -> PaymentProvider: Scan QR and pay via mobile app
+
+    else Action Type: CodaCard Form
+        HCState -> UIStore: Set CodaCard form configuration
+        HCState -> Sections: Show checkout with card form
+        User -> Sections: Fill card details and submit
+        Sections -> HCState: handleCardSDKFormSubmit()
+
+    else Action Type: Start Polling
+        HCState -> HCState: Start payment status polling
+        loop Every 3 seconds
+            HCState -> PayClient: getPaymentStatus(txnId)
+            PayClient --> HCState: Payment status response
+            alt Payment completed/failed
+                note over HCState: Stop polling
+                break
+            end
+        end
+    end
+
+    PayClient --> HCState: Final payment result with dynamic content
+
+    alt Payment Successful
+        HCState -> UIStore: Store success dynamic content
+        HCState -> Sections: Show complete section
+        Sections --> User: Display success page with receipt
+
+    else Payment Failed
+        HCState -> UIStore: Store failure dynamic content
+        HCState -> Sections: Show failed section
+        Sections --> User: Display failure page with error details
+    end
+
+else No HCState
+    BeginPage -> Sections: Show default checkout section
+    Sections --> User: Display basic checkout form
+end
+
+alt User returns to merchant
+    User -> Sections: Click "Back to Merchant"
+    alt Mobile App
+        Sections -> Browser: Close webview via AndroidFunction
+    else Web/iFrame
+        Sections -> Browser: Redirect to merchantCompleteUrl
+    end
+end
+
+alt Error occurs
+    note over HCState: Exception caught at any step
+    HCState -> Sections: Show error section
+    Sections --> User: Display error page
+end
+
+@enduml

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Back to Merchant</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 50px;
+            margin: 0;
+            font-family: Lato-Bold, sans-serif;
+        }
+        .contents {
+            text-align: center;
+        }
+        .contents .btnRedirect {
+            margin: 20px auto 0;
+            display: block;
+            width: 190px;
+            height: 44px;
+            background: #6242FC;
+            font-size: 18px;
+            line-height: 44px;
+            text-decoration: none;
+            color: #fff;
+            text-align: center;
+        }
+        #countdown {
+            margin: 20px auto 0;
+            font-size: 18px;
+            font-weight: bold;
+            color: black;
+        }
+        #manualRedirectMessage {
+            margin-top: 20px;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+<div class="contents">
+    <div id="countdown"></div>
+    <a id="redirect-button" class="btnRedirect">Back to Merchant</a>
+    <p id="manualRedirectMessage" style="display: none;">
+        If you are not redirected automatically, please click the button above.
+    </p>
+</div>
+
+<script>
+    const redirectSeconds = 3; // Hardcoded value for redirect seconds
+    const redirectUrl = "https://stackoverflow.com/questions/71685834/aws-eventbridge-sqs-and-lambda-with-serverless-framework";
+    let url = redirectUrl;
+
+     if (!redirectUrl.match(/^http?:\/\//i) || !redirectUrl.match(/^https?:\/\//i)) {
+         url = 'http://' + redirectUrl;
+     }
+
+    function redirect() {
+        window.location.replace(url);
+    }
+
+    const redirectButton = document.getElementById('redirect-button');
+    redirectButton.href = url;
+    redirectButton.onclick = redirect;
+
+    const countdownElement = document.getElementById('countdown');
+    let timeLeft = redirectSeconds;
+
+    function updateCountdown() {
+        countdownElement.textContent = `Redirecting back to merchant in 3 seconds...`;
+        if (timeLeft <= 0) {
+            countdownElement.textContent = "Redirecting...";
+            redirect();
+        } else {
+            timeLeft--;
+            setTimeout(updateCountdown, 1000);
+        }
+    }
+
+    updateCountdown();
+
+    setTimeout(function() {
+        document.getElementById('manualRedirectMessage').style.display = 'block';
+    }, (redirectSeconds + 1) * 1000);
+</script>
+</body>
+</html>

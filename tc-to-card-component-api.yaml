@@ -1,0 +1,1416 @@
+openapi: 3.0.2
+info:
+  title: Codapay Tokenize Charge APIs
+  description: |-
+    The first version of Coapay Tokenize Charge APIs. You can find out more about
+    Codapay at [https://www.codapayments.com/codapay](https://www.codapayments.com/codapay)
+  termsOfService: https://www.codapayments.com/terms-conditions/terms-conditions
+  contact:
+    email: etika.krisdyan@codapayments.com
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+externalDocs:
+  description: Find out more about Tokenize Charge
+  url: https://www.codapayments.com/codapay
+servers:
+  - url: https://card-api.codapayments.com/v1
+tags:
+  - name: Shoppers
+    description: APIs for managing Shoppers
+  - name: PaymentMethods
+    description: APIs for managing Tokens
+  - name: Tokens
+    description: APIs for managing Tokens
+  - name: Charges
+    description: APIs for managing Charges
+  - name: ChargeIntents
+    description: Wrap APIs for creating Charges
+  - name: ChargeIntentsCLIENT
+    description: Wrap APIs for creating Charges
+  - name: Subscribtions
+    description: APIs for managing Subscribtions
+paths:
+  /shoppers:
+    post:
+      tags:
+        - Shoppers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Shopper'
+            examples:
+              All available attributes:
+                description: Shopper creation request by using all of the available attributes
+                value:
+                  phone_number: '081231684642'
+                  email: pahang@gmail.com
+                  partner_shopper_id: hashed-partner-shopper-id
+              Merchant shopper id only:
+                description: Shopper creation request by using the only required attributes
+                value:
+                  partner_shopper_id: hashed-partner-shopper-id
+      responses:
+        '201':
+          description: Shopper is updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shopper'
+              examples:
+                Complete:
+                  description: Shopper creation response by using all of the available attributes
+                  value:
+                    id: spr_xxxxxx
+                    object: spr
+                    phone_number: '081231684642'
+                    email: pahang@gmail.com
+                    partner_shopper_id: hashed-merchant-shopper-id
+                    status_code: active
+                Merchant shopper id only:
+                  description: Shopper creation response by using the only required attributes
+                  value:
+                    id: spr_xxxxxx
+                    object: spr
+                    partner_shopper_id: hashed-merchant-shopper-id
+                    status_code: active
+  /shoppers/{shopperId}:
+    get:
+      tags:
+        - Shoppers
+      parameters:
+        - name: shopperId
+          description: Get an existing Shopper
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ShopperId'
+      responses:
+        '200':
+          description: Shopper object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shopper'
+              examples:
+                Status = Active:
+                  description: Created SHopper with all of the available attributes
+                  value:
+                    id: spr_xxxxxx
+                    object: spr
+                    phone_number: '081231684642'
+                    email: pahang@gmail.com
+                    partner_shopper_id: hashed-merchant-shopper-id
+                    status_code: active
+                Status = Inactive:
+                  description: Created SHopper with required attributes only
+                  value:
+                    id: spr_xxxxxx
+                    object: spr
+                    phone_number: '081231684642'
+                    email: pahang@gmail.com
+                    partner_shopper_id: hashed-merchant-shopper-id
+                    status_code: inactive
+  /payment_methods:
+    post:
+      tags:
+        - PaymentMethods
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentMethod'
+            examples:
+              gopay:
+                description: Payment method with type = gopay
+                value:
+                  shopper_id: shp_xxx
+                  type: gopay
+                  detail:
+                    country_code: ID
+                    msisdn: '+6281231684642'
+              dana:
+                description: Payment method with type = dana
+                value:
+                  shopper_id: shp_xxx
+                  type: dana
+                  detail:
+                    country_code: ID
+                    msisdn: '+6281231684642'
+              card:
+                description: Payment method with type = card
+                value:
+                  shopper_id: shp_xxx
+                  type: card
+                  email: kiki@codapayments.com
+                  detail:
+                    country_code: SA
+      responses:
+        '201':
+          description: PaymentMethod is created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+              example:
+                id: pmt_xxx
+                shopper_id: shp_xxx
+                type: gopay
+                detail:
+                  country_code: ID
+                  msisdn: '+6281231684642'
+  /payment_methods/{paymentMethodId}:
+    get:
+      tags:
+        - PaymentMethods
+      parameters:
+        - name: paymentMethodId
+          description: Get an existing PaymentMethod
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/PaymentMethodId'
+      responses:
+        '200':
+          description: PaymentMethod object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+              example:
+                id: pmt_xxx
+                shopper_id: shp_xxx
+                type: gopay
+                detail:
+                  country_code: ID
+                  msisdn: '+6281231684642'
+  /tokens:
+    post:
+      tags:
+        - Tokens
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Token'
+            example:
+              payment_method_id: pmt_xxx
+      responses:
+        '201':
+          description: Token object
+          content:
+            application/json:
+              example:
+                id: tkn_xxxxxx
+                created_at: '2000-10-31T01:30:00.000-05:00'
+                payment_method_id: pmt_xxx
+                status_code: waiting_for_shopper_action
+                shopper_action:
+                  id: spa_xxxxxx
+                  type: redirection
+                  redirection:
+                    id: rdt_xxxxxx
+                    method: GET
+                    url: https://window.codapayments.com/token-auth-window/token-auth-window_xxxxxx
+  /tokens/{tokenId}:
+    get:
+      tags:
+        - Tokens
+      parameters:
+        - name: tokenId
+          description: The unique identifier of the Token
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/TokenId'
+      responses:
+        '200':
+          description: Token object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+              examples:
+                Status = waiting_for_shopper_action:
+                  description: Token requires shopper action to be active
+                  value:
+                    id: tkn_xxxxxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    payment_method_id: pmt_xxx
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      id: spa_xxxxxx
+                      type: redirection
+                      redirection:
+                        id: rdt_xxxxxx
+                        method: GET
+                        url: https://window.codapayments.com/token-auth-window/token-auth-window_xxxxxx
+                Status = Authorized:
+                  description: Token is Authorized
+                  value:
+                    id: tkn_xxxxxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    payment_method_id: pmt_xxx
+                    status_code: authorized
+  /charges:
+    post:
+      tags:
+        - Charges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Charge'
+            examples:
+              Basic:
+                value:
+                  token_id: tkn_xxxxxx
+                  item_code: item-code-123
+                  item_name: Item Name 123
+                  amount_value: '10'
+                  amount_currency: IDR
+                  partner_reference: partner-reference-123
+              Wrap (Scopely):
+                value:
+                  item_code: item-123
+                  item_name: Item 123
+                  amount_value: '1099'
+                  amount_currency: USD
+                  partner_reference: partner-reference-123
+                  shopper_agent:
+                    ip_address: '192.168.0.1'
+                    user_agent: "Mozilla/5.0.."
+                    timezone: '300'
+                    screen_height: 864
+                    screen_width: 1536
+                    colour_depth: 24
+                    accept_header: "text/html"
+                  setting:
+                    default_language: en
+                    partner_webhook_url: https://mymerchant.org/success
+                    card:
+                      pre_capture_ack_url: https://mymerchant.org/capture
+                      capture_grace_period: 0
+                      3ds_challenge_window_size: 390x400
+                  token:
+                    type: not_required
+                    payment_method:
+                      type: card
+                      card:
+                        country_code: US
+                        number: '42424242424242'
+                        holder_name: John Doe
+                        expiry_month: '12'
+                        expiry_date: '30'
+                        csc: '123'
+                      shopper:
+                        zip_code: 98104
+                        email: johndoe@gmail.com
+      responses:
+        '201':
+          description: Charge is successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Charge'
+              examples:
+                Status = Succeeded:
+                  description: Succeeded Charge
+                  value:
+                    id: crg_xxxxxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    token_id: tkn_xxxxxx
+                    item_code: item-code-123
+                    item_name: Item Name 123
+                    amount_value: '10'
+                    amount_currency: IDR
+                    partner_reference: partner-reference-123
+                    status_code: succeeded
+                Status = Failed:
+                  description: Failed Charge
+                  value:
+                    id: crg_xxxxxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    token_id: tkn_xxxxxx
+                    item_code: item-code-123
+                    item_name: Item Name 123
+                    amount_value: '10'
+                    amount_currency: IDR
+                    partner_reference: partner-reference-123
+                    status_code: succeeded
+                Status = Waiting for shopper action:
+                  description: Pending Charge - Waiting for shopper action
+                  value:
+                    id: crg_xxxxxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    token_id: tkn_xxxxxx
+                    item_code: item-code-123
+                    item_name: Item Name 123
+                    amount_value: '10'
+                    amount_currency: IDR
+                    partner_reference: partner-reference-123
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      id: spa_xxxxxx
+                      type: redirection
+                      redirection:
+                        id: rdt_xxxxxx
+                        method: GET
+                        url: https://window.codapayments.com/token-auth-window/charge-auth-window_xxxxxx
+                (wrap) Status = waiting for shopper action:
+                  description: Pending Charge - Waiting for shopper action
+                  value:
+                    id: chg_sglgdroise75w8
+                    item_code: item-123
+                    item_name: Item 123
+                    amount_value: '1099'
+                    amount_currency: USD
+                    partner_reference: partner-reference-123
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      type: form
+                      form: '//form'
+                    shopper_agent:
+                      ip_address: '192.168.0.1'
+                      user_agent: "Mozilla/5.0.."
+                      timezone: '300'
+                      screen_height: 864
+                      screen_width: 1536
+                      colour_depth: 24
+                      accept_header: "text/html"
+                    setting:
+                      default_language: en
+                      partner_webhook_url: https://mymerchant.org/success
+                      card:
+                        pre_capture_ack_url: https://mymerchant.org/capture
+                        capture_grace_period: 0
+                        3ds_challenge_window_size: 390x400
+                    token:
+                      id: tkn_sgoar7wtr8owgo
+                      type: not_required
+                      status_code: not_required
+                      payment_method:
+                        id: pmt_augeriowuyvw
+                        type: card
+                        card:
+                          country_code: US
+                          number: '42424242424242'
+                          holder_name: John Doe
+                          expiry_month: '12'
+                          expiry_date: '30'
+                          csc: '123'
+                        shopper:
+                          id: shp_kajgrfowuyrew84y56
+                          zip_code: 98104
+                          email: johndoe@gmail.com
+                          status_code: active
+  /charges/{chargeId}:
+    get:
+      tags:
+        - Charges
+      parameters:
+        - name: chargeId
+          description: The unique identifier of the charge
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ChargeId'
+      responses:
+        '200':
+          description: The Charge Object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Charge'
+              examples:
+                Status = Succeeded:
+                  description: Succeeded Charge
+                  value:
+                    id: crg_xxxxxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    token_id: tkn_xxxxxx
+                    item_code: item-code-123
+                    item_name: Item Name 123
+                    amount_value: '10'
+                    amount_currency: IDR
+                    partner_reference: partner-reference-123
+                    status_code: succeeded
+                Status = Failed:
+                  description: Failed Charge
+                  value:
+                    id: crg_xxxxxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    token_id: tkn_xxxxxx
+                    item_code: item-code-123
+                    item_name: Item Name 123
+                    amount_value: '10'
+                    amount_currency: IDR
+                    partner_reference: partner-reference-123
+                    status_code: succeeded
+                Status = Waiting for shopper action:
+                  description: Pending Charge - Waiting for shopper action
+                  value:
+                    id: crg_xxxxxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    token_id: tkn_xxxxxx
+                    item_code: item-code-123
+                    item_name: Item Name 123
+                    amount_value: '10'
+                    amount_currency: IDR
+                    partner_reference: partner-reference-123
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      id: spa_xxxxxx
+                      type: redirection
+                      redirection:
+                        id: rdt_xxxxxx
+                        method: GET
+                        url: https://window.codapayments.com/token-auth-window/charge-auth-window_xxxxxx
+                (wrap) Status = waiting for shopper action:
+                  description: (Wrap) Pending Charge - Waiting for shopper action
+                  value:
+                    id: chg_sglgdroise75w8
+                    item_code: item-123
+                    item_name: Item 123
+                    amount_value: '1099'
+                    amount_currency: USD
+                    partner_reference: partner-reference-123
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      type: form
+                      form: '//form'
+                    shopper_agent:
+                      ip_address: '192.168.0.1'
+                      user_agent: "Mozilla/5.0.."
+                      timezone: '300'
+                      screen_height: 864
+                      screen_width: 1536
+                      colour_depth: 24
+                      accept_header: "text/html"
+                    setting:
+                      default_language: en
+                      partner_webhook_url: https://mymerchant.org/success
+                      card:
+                        pre_capture_ack_url: https://mymerchant.org/capture
+                        capture_grace_period: 0
+                        3ds_challenge_window_size: 390x400
+                    token:
+                      id: tkn_sgoar7wtr8owgo
+                      type: not_required
+                      status_code: not_required
+                      payment_method:
+                        id: pmt_augeriowuyvw
+                        type: card
+                        card:
+                          country_code: US
+                          number: '42424242424242'
+                          holder_name: John Doe
+                          expiry_month: '12'
+                          expiry_date: '30'
+                          csc: '123'
+                        shopper:
+                          id: shp_kajgrfowuyrew84y56
+                          zip_code: 98104
+                          email: johndoe@gmail.com
+                          status_code: active
+  /charge-intents:
+    post:
+      tags:
+        - ChargeIntents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargeIntent'
+            example:
+              charge:
+                item_code: item-code-123
+                item_name: Item Name 123
+                amount_value: '10'
+                amount_currency: IDR
+                partner_reference: partner-reference-123
+              payment_method:
+                type: card
+                detail:
+                  country_code: US
+              shopper:
+                partner_shopper_id: partner-shopper-id-123
+                email: email@email.email
+      responses:
+        '201':
+          description: Charge is successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Charge'
+              examples:
+                Status = waiting_for_shopper_action | card sdk:
+                  description: Pending Charge Intent - 3DS is required
+                  value:
+                    id: chi_xxx
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    charge_id: chg_xxx
+                    token_id: tkn_xxx
+                    payment_method: pmt_xxx
+                    shopper: shp_xxx
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      id: spa_xxxxxx
+                      type: card_sdk
+                      card_sdk:
+                        id: rdt_xxxxxx
+                        client_secret: client_secret_xxxxxxx
+                        charge_intent_id: chi_xxx
+                        action: collect_payment_method_detail
+  /charge-intents/{chargeIntentId}:
+    get:
+      tags:
+        - ChargeIntents
+      parameters:
+        - name: chargeId
+          description: The unique identifier of the charge intent
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ChargeIntentId'
+      responses:
+        '200':
+          description: The Charge Intent Object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeIntent'
+              examples:
+                Status = waiting_for_shopper_action | card sdk:
+                  description: Pending Charge Intent - Payment method card detail required
+                  value:
+                    id: chi_xxx
+                    charge_id: chg_xxx
+                    token_id: tkn_xxx
+                    payment_method: pmt_xxx
+                    shopper: shp_xxx
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      id: sdk_xxxxxx
+                      type: card_form
+                      card_form:
+                        id: cfm_xxx
+                        action: collect_payment_method_detail
+                Status = Succeeded:
+                  description: Succeeded ChargeIntent
+                  value:
+                    id: chi_xxx
+                    charge_id: chg_xxx
+                    token_id: tkn_xxx
+                    payment_method: pmt_xxx
+                    shopper: shp_xxx
+                    status_code: succeeded
+                Status = Failed:
+                  description: Failed ChargeIntent
+                  value:
+                    id: chi_xxx
+                    charge_id: chg_xxx
+                    token_id: tkn_xxx
+                    payment_method: pmt_xxx
+                    shopper: shp_xxx
+                    status_code: failed_rms
+  /client/charge-intents/{chargeIntentId}:
+    get:
+      tags:
+        - ChargeIntentsCLIENT
+      parameters:
+        - name: chargeId
+          description: The unique identifier of the charge intent
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ChargeIntentId'
+      responses:
+        '200':
+          description: The Charge Intent Object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeIntent'
+              examples:
+                Status = waiting_for_shopper_action | card form | collect_payment_method_detail:
+                  description: Pending Charge Intent - Payment method card detail required
+                  value:
+                    id: chi_xxx
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      id: spa_xxxxxx
+                      type: card_form
+                      card_form:
+                        id: rdt_xxxxxx
+                        charge_intent_id: chi_xxx
+                        action: collect_payment_method_detail
+                Status = waiting_for_shopper_action | DDC:
+                  description: Initiating DDC
+                  value:
+                    id: chi_xxx
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      id: spa_xxxxxx
+                      type: html-hidden
+                      html: "\n<div>\n<iframe height=\"1\" width=\"1\" style=\"display: none;\">\n  <!-- This is a Cardinal Commerce URL in live. -->\n  <form id=\"collectionForm\" method=\"POST\" action=\"https://centinelapistag.cardinalcommerce.com/V1/Cruise/Collect\">\n    <input type=\"hidden\" name=\"Bin\" value=\"4000000000001000\" />\n    <input type=\"hidden\" name=\"JWT\" value=\"--please generate JWT--\" />\n  </form>\n  <script>\n    window.onload = function() {\n      document.getElementById('collectionForm').submit();\n    }\n  </script>\n</iframe>\n<script>\nwindow.addEventListener(\"message\", function(event) {\n   //This is a Cardinal Commerce URL in live.\n     if (event.origin === \"https://centinelapistag.cardinalcommerce.com\") {\n         var data = JSON.parse(event.data);\n         console.warn('Merchant received a message:', data);\n         if (data !== undefined && data.Status) {\n\t\t\tconst sessionId = data.SessionId\n\t\t\t// js for calling /client/charge-intents\n         }\n     }\n}, false);\n</script>\n</div>\n"
+                Status = waiting_for_shopper_action | html | 3ds:
+                  description: Pending ChargeIntent
+                  value:
+                    id: chi_xxx
+                    status_code: waiting_for_shopper_action
+                    shopper_action:
+                      id: spa_xxxxxx
+                      type: html-popup
+                      html: |
+                        <iframe height="250" width="400">
+                           <!-- This is a Cardinal Commerce URL in live -->
+                           <form id= "challengeForm" method= "POST" action="https://centinelapistag.cardinalcommerce.com/V2/Cruise/StepUp">
+                              <input type="hidden" name="JWT" value= "please generate JWT" />
+                              <input type="hidden" name="MD" value="1234567890" />
+                           </form>
+                           <script>
+                              window.onload = function() {
+                                 // Auto submit form on page load
+                                 document.getElementById('challengeForm').submit();
+                              }
+                           </script>
+                        </iframe>
+                Status = authorized:
+                  description: authorized ChargeIntent
+                  value:
+                    id: chi_xxx
+                    status_code: authorized
+                Status = succeeded:
+                  description: Succeeded ChargeIntent
+                  value:
+                    id: chi_xxx
+                    status_code: succeeded
+    patch:
+      tags:
+        - ChargeIntentsCLIENT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargeIntent'
+            examples:
+              Submit card detail:
+                description: To submit card detail
+                value:
+                  charge.token.payment_method.detail:
+                    card_number: '4242424242424242'
+              Submit sessionId:
+                description: To submit sessionId etc
+                value:
+                  charge:
+                    provider_custom_data:
+                      session_id: the-session-id
+                      shopper_browser: |-
+                        <browser>
+                                            <acceptHeader>text/html</acceptHeader>
+                                            <userAgentHeader>Mozilla/5.0 ...</userAgentHeader>
+                                            <timeZone>300</timeZone>
+                                            <browserLanguage>en-US</browserLanguage>
+                                            <browserJavaEnabled>true</browserJavaEnabled>
+                                            <browserJavaScriptEnabled>true</browserJavaScriptEnabled>
+                                            <browserColourDepth>24</browserColourDepth>
+                                            <browserScreenHeight>864</browserScreenHeight>
+                                            <browserScreenWidth>1536</browserScreenWidth>
+                                        </browser>
+                      shopper_ip: 192.168.1.1
+                    token.payment_method.detail:
+                      card_number: '4242424242424242'
+                      card_expiry_month: '12'
+                      card_expiry_year: '25'
+                      card_security_code: '123'
+                      card_holder_name: Master Yan
+                      card_holder_email: master.yan@codapayments.com
+      responses:
+        '204':
+          description: ChargeIntent is successfully patched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeIntent'
+  /subscription-plans:
+    post:
+      tags:
+        - Subscribtions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscribtionPlan'
+            examples:
+              Recurrence Type - Monthly:
+                description: Subscription Plan request with monthly of recurrence type
+                value:
+                  amount:
+                    value: 10000
+                    currency: IDR
+                  recurrence:
+                    type: monthly
+                    frequency: 12
+                  free_charge_frequency: 1
+              Recurrence Type - Weekly:
+                description: Subscription Plan request with weekly of recurrence type
+                value:
+                  amount:
+                    value: 10000
+                    currency: IDR
+                  recurrence:
+                    type: weekly
+                    frequency: 54
+                  free_charge_frequency: 1
+              Recurrence Type - Daily:
+                description: Subscription Plan request with daily of recurrence type
+                value:
+                  amount:
+                    value: 10000
+                    currency: IDR
+                  recurrence:
+                    type: daily
+                    frequency: 365
+                  free_charge_frequency: 1
+      responses:
+        '201':
+          description: Subscribtion Plan is successfuly created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscribtionPlan'
+              examples:
+                Recurrence Type - Monthly:
+                  value:
+                    id: sbp_xxxxxx
+                    object: sbp
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    amount:
+                      value: 10000
+                      currency: IDR
+                    recurrence:
+                      object: recurrence
+                      type: monthly
+                      frequency: 12
+                    free_charge_frequency: 1
+                Recurrence Type - Weekly:
+                  value:
+                    id: sbp_xxxxxx
+                    object: sbp
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    amount:
+                      value: 10000
+                      currency: IDR
+                    recurrence:
+                      object: recurrence
+                      type: weekly
+                      frequency: 54
+                    free_charge_frequency: 1
+                Recurrence Type - Daily:
+                  value:
+                    id: sbp_xxxxxx
+                    object: sbp
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    amount:
+                      value: 10000
+                      currency: IDR
+                    recurrence:
+                      object: recurrence
+                      type: daily
+                      frequency: 365
+                    free_charge_frequency: 1
+  /subscription-plans/{subs-planId}:
+    get:
+      tags:
+        - Subscribtions
+      parameters:
+        - name: subs-planId
+          description: The unique identifier of the Subscription Plan
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/SubscriptionPlanId'
+      responses:
+        '200':
+          description: The Subscribtion Plan Object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscribtionPlan'
+              examples:
+                Recurrence Type - Monthly:
+                  value:
+                    id: sbp_xxxxxx
+                    object: sbp
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    amount:
+                      value: 10000
+                      currency: IDR
+                    recurrence:
+                      object: recurrence
+                      type: monthly
+                      frequency: 12
+                    free_charge_frequency: 1
+                Recurrence Type - Weekly:
+                  value:
+                    id: sbp_xxxxxx
+                    object: sbp
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    amount:
+                      value: 10000
+                      currency: IDR
+                    recurrence:
+                      object: recurrence
+                      type: weekly
+                      frequency: 54
+                    free_charge_frequency: 1
+                Recurrence Type - Daily:
+                  value:
+                    id: sbp_xxxxxx
+                    object: sbp
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    amount:
+                      value: 10000
+                      currency: IDR
+                    recurrence:
+                      object: recurrence
+                      type: daily
+                      frequency: 365
+                    free_charge_frequency: 1
+    delete:
+      tags:
+        - Subscribtions
+      parameters:
+        - name: subs-planId
+          description: The unique identifier of the Subscription Plan
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/SubscriptionPlanId'
+      responses:
+        '204':
+          description: Subscribtion Plan was deleted successfully
+  /subscriptions:
+    post:
+      tags:
+        - Subscribtions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subscribtion'
+            examples:
+              With Token Id:
+                description: Subscription request with Token Id
+                value:
+                  subscribtion_plan_id: sbp_xxxxxx
+                  token_id: tkn_xxxxxx
+              With Shopper Id and Payment Method Type:
+                description: Subscription request with Token Id
+                value:
+                  subscribtion_plan_id: sbp_xxxxxx
+                  token_payment_method:
+                    type: gopay
+                    shopper_id: spr_xxxx
+              Wrap:
+                description: Subscription request with Token Id
+                value:
+                  subscription_plan:
+                    amount:
+                      value: 10000
+                      currency: IDR
+                    recurrence:
+                      object: recurrence
+                      type: weekly
+                      frequency: 54
+                    free_charge_frequency: 1
+                  token:
+                    payment_method:
+                      type: gopay
+                      shopper:
+                        partner_shopper_id: sviuoeugr
+                        email: etika.krisdyan@codapayments.com
+                        phoneNumber: '081231684642'
+      responses:
+        '201':
+          description: Subscription is successfuly created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscribtion'
+              examples:
+                Status = Active:
+                  description: Active Subscription
+                  value:
+                    id: sub_xxxxxx
+                    object: sub
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    subscribtion_plan_id: sbp_xxxxxx
+                    token_id: tkn_xxxxxx
+                    status_code: active
+                    status_message: Subscription is Active
+                Status = PendingTokenExpired:
+                  description: Closed Subscription
+                  value:
+                    id: sub_xxxxxx
+                    object: sub
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    subscribtion_plan_id: sbp_xxxxxx
+                    token_id: tkn_xxxxxx
+                    status_code: PendingTokenExpired
+                    status_message: Subscription is pending to be created due to expired token
+                Wrap - Status = PendingTokenwaiting_for_shopper_action:
+                  description: Closed Subscription
+                  value:
+                    id: sub_xxxxxx
+                    object: sub
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    subscribtion_plan_id: sbp_xxxxxx
+                    token:
+                      id: tkn_xxxxxx
+                      object: tkn
+                      created_at: '2000-10-31T01:30:00.000-05:00'
+                      payment_method_id: pmd_xxxxxx
+                      status_code: waiting_for_shopper_action
+                      status_message: Token requires shopper action to be active
+                      shopper_action:
+                        id: spa_xxxxxx
+                        object: spa
+                        type: redirection
+                        redirection:
+                          id: rdt_xxxxxx
+                          object: rdt
+                          method: GET
+                          url: https://window.codapayments.com/token-auth-window/token-auth-window_xxxxxx
+                    status_code: PendingTokenwaiting_for_shopper_action
+                    status_message: Subscription is pending to be created due to expired token
+  /subscriptions/{subsId}:
+    get:
+      tags:
+        - Subscribtions
+      parameters:
+        - name: subsId
+          description: The unique identifier of the Subscription
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/SubscriptionId'
+      responses:
+        '200':
+          description: The Subscribtion Object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscribtion'
+              examples:
+                Status = Active:
+                  description: Active Subscription
+                  value:
+                    id: sub_xxxxxx
+                    object: sub
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    subscribtion_plan_id: sbp_xxxxxx
+                    token_id: tkn_xxxxxx
+                    status_code: active
+                    status_message: Subscription is Active
+                Status = PendingTokenExpired:
+                  description: Closed Subscription
+                  value:
+                    id: sub_xxxxxx
+                    object: sub
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    subscribtion_plan_id: sbp_xxxxxx
+                    token_id: tkn_xxxxxx
+                    status_code: SubscribtionFailedExpiredToken
+                    status_message: Subscription is pending to be created due to expired token
+                Status = Completed:
+                  description: Closed Subscription
+                  value:
+                    id: sub_xxxxxx
+                    object: sub
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    subscribtion_plan_id: sbp_xxxxxx
+                    token_id: tkn_xxxxxx
+                    status_code: Completed
+                    status_message: Subscription is completed
+                Status = Cancelled:
+                  description: Closed Subscription
+                  value:
+                    id: sub_xxxxxx
+                    object: sub
+                    created_at: '2000-10-31T01:30:00.000-05:00'
+                    subscribtion_plan_id: sbp_xxxxxx
+                    token_id: tkn_xxxxxx
+                    status_code: Cancelled
+                    status_message: Subscription is Cancelled
+  /subscriptions/{subsId}/cancellations:
+    post:
+      tags:
+        - Subscribtions
+      parameters:
+        - name: subsId
+          description: The unique identifier of the Subscription Plan
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/SubscriptionId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscribtionCancellation'
+            example:
+              reason: User cancel
+      responses:
+        '200':
+          description: Subscription cancellation is Suceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscribtionCancellation'
+              examples:
+                Status = Suceeded:
+                  value:
+                    id: sbc_xxxxxx
+                    object: sbc
+                    subscription_id: sub_xxxxxx
+                    reason: User cancel
+                    status_code: Accepted
+  /subscriptions/{subsId}/cancellations/{subs-cancelId}:
+    get:
+      tags:
+        - Subscribtions
+      parameters:
+        - name: subsId
+          description: The unique identifier of the Subscription Plan
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/SubscriptionId'
+        - name: subs-cancelId
+          description: The unique identifier of the Subscription Cancellation
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/SubscriptionCancellationId'
+      responses:
+        '200':
+          description: The Subscribtion Cancellation Object
+          content:
+            application/json:
+              example:
+                id: sbc_xxxxxx
+                object: sbc
+                subscription_id: sbc_xxxxxx
+                reason: User cancel
+components:
+  schemas:
+    Object:
+      type: string
+      enum:
+        - spr
+        - pmd
+        - tkn
+        - sbp
+        - sub
+        - sbc
+        - spa
+        - rcr
+    CreatedAt:
+      type: number
+      description: The timestamp of object creation
+    ShopperId:
+      type: string
+      description: 'A unique ID of a Shopper. Prefix: spr'
+    ShopperStatus:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          enum:
+            - active
+            - Inactive
+        message:
+          title: string
+    Shopper:
+      type: object
+      required:
+        - partner_shopper_id
+      properties:
+        id:
+          $ref: '#/components/schemas/ShopperId'
+        object:
+          $ref: '#/components/schemas/Object'
+        created_at:
+          $ref: '#/components/schemas/CreatedAt'
+        partner_shopper_id:
+          type: string
+          description: Merchant unique shopper identifier. Suggested to be merchant hashed shopper ID
+        phone_number:
+          type: string
+          description: Shopper phone number
+        email:
+          type: string
+          description: Shopper email
+        status:
+          $ref: '#/components/schemas/ShopperStatus'
+    PaymentMethodId:
+      type: string
+      description: 'A unique ID of a Payment Method. Prefix: pmd'
+    ChargeIntentId:
+      type: string
+      description: 'A unique ID of a ChargeIntent. Prefix: pmd'
+    PaymentMethodType:
+      type: string
+      enum:
+        - gopay
+        - rabbit_line
+    PaymentMethod:
+      type: object
+      required:
+        - type
+        - shopper
+      properties:
+        id:
+          $ref: '#/components/schemas/TokenId'
+        object:
+          $ref: '#/components/schemas/Object'
+        created_at:
+          $ref: '#/components/schemas/CreatedAt'
+        type:
+          $ref: '#/components/schemas/PaymentMethodType'
+        shopper:
+          $ref: '#/components/schemas/Shopper'
+        detail:
+          type: object
+    ChargeIntent:
+      type: object
+    TokenId:
+      type: string
+      description: 'A unique ID of a Token. Prefix: tkn'
+    TokenStatus:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - waiting_for_shopper_action
+            - active
+            - Expired
+    ShopperActionId:
+      type: string
+      description: 'A unique ID of a Shopper Action. Prefix: spa'
+    ShopperActionType:
+      type: string
+      enum:
+        - redirection
+    ShopperActionRedirectionId:
+      type: string
+      description: 'A unique identifier of Shopper Action Redirection. Prefix: rdt'
+    ShopperActionRedirection:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/ShopperActionRedirectionId'
+        object:
+          $ref: '#/components/schemas/Object'
+        method:
+          type: string
+          description: Http method for the redirection
+          enum:
+            - GET
+            - POST
+        url:
+          type: string
+          description: Url of the redirection
+    ShopperAction:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/ShopperActionId'
+        object:
+          $ref: '#/components/schemas/Object'
+        type:
+          $ref: '#/components/schemas/ShopperActionType'
+        redirection:
+          $ref: '#/components/schemas/ShopperActionRedirection'
+    Token:
+      type: object
+      required:
+        - payment_method
+      properties:
+        id:
+          $ref: '#/components/schemas/TokenId'
+        object:
+          $ref: '#/components/schemas/Object'
+        created_at:
+          $ref: '#/components/schemas/CreatedAt'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        status:
+          $ref: '#/components/schemas/TokenStatus'
+        shopper_action:
+          $ref: '#/components/schemas/ShopperAction'
+    TokenCancellationId:
+      type: string
+      description: 'A unique ID of a Token Cancellation. Prefix: tkc'
+    TokenCancellation:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/TokenCancellationId'
+        object:
+          $ref: '#/components/schemas/Object'
+        created_at:
+          $ref: '#/components/schemas/CreatedAt'
+        reason:
+          type: string
+          description: Reason of token cancellation
+    ChargeId:
+      type: string
+      description: 'A unique ID of a Charge. Prefix: crg'
+    Amount:
+      type: object
+      properties:
+        value:
+          type: number
+          description: Value of the amount using smallest unit of currency
+        currency:
+          type: string
+          enum:
+            - IDR
+            - TBH
+    ChargeStatus:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - Succeded
+            - FailedTokenExpired
+        message:
+          type: string
+          description: Detail message of Charge Status
+    Charge:
+      type: object
+      required:
+        - token
+        - amount
+      properties:
+        id:
+          $ref: '#/components/schemas/ChargeId'
+        object:
+          $ref: '#/components/schemas/Object'
+        created_at:
+          $ref: '#/components/schemas/CreatedAt'
+        token:
+          $ref: '#/components/schemas/Token'
+        amount:
+          $ref: '#/components/schemas/Amount'
+        status:
+          $ref: '#/components/schemas/ChargeStatus'
+    SubscribtionPlanId:
+      type: string
+      description: 'A unique ID of a Subscription Plan. Prefix: sbp'
+    RecurrenceId:
+      type: string
+      description: 'A unique identifier of a Recurrence. Prefix: rcr'
+    Recurrence:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/RecurrenceId'
+        object:
+          $ref: '#/components/schemas/Object'
+        type:
+          type: string
+          enum:
+            - monthly
+            - weekly
+            - daily
+        frequency:
+          type: number
+          description: Recurrence charge frequency of a subscribtion
+    SubscriptionPlanId:
+      type: string
+      description: 'A unique ID of a Subscription Plan. Prefix: sbp'
+    SubscribtionPlan:
+      type: object
+      required:
+        - amount
+        - recurrence
+      properties:
+        id:
+          $ref: '#/components/schemas/SubscriptionPlanId'
+        object:
+          $ref: '#/components/schemas/Object'
+        created_at:
+          $ref: '#/components/schemas/CreatedAt'
+        amount:
+          $ref: '#/components/schemas/Amount'
+        recurrence:
+          $ref: '#/components/schemas/Recurrence'
+        free_charge_frequency:
+          type: number
+          description: Free charge frequency of a subscribtion
+    SubscriptionId:
+      type: string
+      description: 'A unique ID of a Subscription. Prefix: sub'
+    SubscribtionStatus:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - active
+            - Completed
+            - PendingTokenExpired
+            - Cancelled
+        message:
+          type: string
+          description: Detail message of Subscribtion Status
+    Subscribtion:
+      type: object
+      required:
+        - subscribtion_plan
+        - token
+      properties:
+        id:
+          $ref: '#/components/schemas/SubscriptionId'
+        object:
+          $ref: '#/components/schemas/Object'
+        created_at:
+          $ref: '#/components/schemas/CreatedAt'
+        subscribtion_plan:
+          $ref: '#/components/schemas/SubscribtionPlan'
+        token:
+          $ref: '#/components/schemas/Token'
+        status:
+          $ref: '#/components/schemas/SubscribtionStatus'
+    SubscriptionCancellationId:
+      type: string
+      description: 'A unique ID of a Subscription Cancellation. Prefix: sbc'
+    SubscribtionCancellation:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/SubscriptionCancellationId'
+        object:
+          $ref: '#/components/schemas/Object'
+        created_at:
+          $ref: '#/components/schemas/CreatedAt'
+        reason:
+          type: string
+          description: Reason of the SubscribtionCancellation
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []

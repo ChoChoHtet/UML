@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <title>Form Inside Iframe</title>
+</head>
+<body>
+
+<form id="challengeForm" method="POST" action="https://tc-api-card-sandbox.codapayments.com/mocks/challenge-page">
+    <input type="hidden" id="JWT" name="JWT" value=""/>
+    <input type="hidden" id="MD" name="MD" value=""/>
+</form>
+
+<script>
+    window.onload = function () {
+        document.getElementById("JWT").value ="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJPcmdVbml0SWQiOiI2NTMxMGEyNzJlYThmZTU4NjdkYTU2YjAiLCJpYXQiOjE3NDEzMzQ1NDgsImlzcyI6IjY1MzEwYTI3MjQxZDlmNWVlNGVhYmMyOCIsImp0aSI6IjYwYTc3MWJjLWEyZGUtNDFlNS1iODFlLTIxNzBiNGNhOTA3MyJ9.5pIcy4n28ljPYo_Oapoo8sMWRzDaKB2yYPutDnVgKFM"
+        document.getElementById("MD").value = "chg_sg1956fa090770096"; // ChargeID
+        document.getElementById('challengeForm').submit();
+    }
+    const payload =
+        {
+            "jti": generateUUID(),
+            "iat": generateEpochTimestamp(),
+            "iss": "65310a27241d9f5ee4eabc28",
+            "OrgUnitId": "65310a272ea8fe5867da56b0",
+            "ReturnUrl": "https://webhook.site/c8af4451-57a2-4755-870c-64d562baa327",
+            "Payload": {
+                "ACSUrl": "https://1merchantacsstag.cardinalcommerce.com/MerchantACSWeb/creq.jsp",
+                "Payload": ""
+            },
+            "ObjectifyPayload": true
+        };
+    const jwt = generateJwt(payload);
+    console.log(jwt)
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0,
+                v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    function generateEpochTimestamp() {
+        const currentTime = new Date().getTime();
+        return Math.floor(currentTime / 1000);
+    }
+
+    function base64url(source) {
+        let encodedSource = CryptoJS.enc.Base64.stringify(source);
+        encodedSource = encodedSource.replace(/\+/g, '-').replace(/\//g, '_').replace(/\=+$/, '');
+        return encodedSource;
+    }
+
+    function generateJwt(payload) {
+        const header = {
+            "alg": "HS256",
+            "typ": "JWT"
+        };
+
+        const encodedHeader = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(header)));
+        const encodedPayload = base64url(CryptoJS.enc.Utf8.parse(JSON.stringify(payload)));
+
+        const signature = encodedHeader + "." + encodedPayload;
+
+        const secret = "716b7b91-2042-435f-852c-4fffa94e294b"; // sandbox
+
+        const hash = CryptoJS.HmacSHA256(signature, secret);
+        const signatureBase64url = base64url(hash);
+
+        return encodedHeader + "." + encodedPayload + "." + signatureBase64url;
+    }
+
+</script>
+
+</body>
+</html>

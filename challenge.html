@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embedded Form</title>
+</head>
+
+<body>
+    <form id="challengeForm" target="_blank" method="POST" action="">
+        <input id="challengeJWT" name="JWT" />
+        <input id="challengeMD" name="MD"/>
+    </form>
+    <script>
+        window.addEventListener('message', function(event) {
+            console.log("Message received (Challenge): " + JSON.stringify(event.data));
+            const data = event.data;
+            document.getElementById('challengeJWT').value = data.jwt;
+            document.getElementById('challengeMD').value = data.md;
+
+            document.getElementById("challengeForm").submit();
+        });
+    </script>
+</body>
+</html>

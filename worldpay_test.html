@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Form</title>
+    <style>
+        form {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+<form id="paymentForm" onsubmit="handleSubmit(event)">
+    <label for="cardName">Cardholder Name</label>
+    <input type="text" id="cardName" name="cardName" value="3DS" required>
+
+    <label for="cardNumber">Card Number</label>
+    <input type="number" id="cardNumber" name="cardNumber" value="4000000000001000" required>
+
+    <label for="expiryDate">Expiry Date (MM/YY)</label>
+    <input type="text" id="expiryDate" name="expiryDate" placeholder="MM/YY" maxlength="5" value="12/26" required>
+
+    <label for="cvv">CVV</label>
+    <input type="number" id="cvv" name="cvv" value="555" required>
+
+    <input type="submit" id="payButton" value="Pay">
+</form>
+
+<script>
+    function submitDDC(cardNumber) {
+        createToken()
+            .then(token => {
+                var formData = new FormData();
+                formData.append('Bin', cardNumber);
+                formData.append('JWT', token);
+                var xhr = new XMLHttpRequest(); // Create new XMLHttpRequest object
+                xhr.open('POST', "https://centinelapistag.cardinalcommerce.com/V1/Cruise/Collect", true); // Open connection
+                xhr.onload = function () {
+                    // Request finished. Check for success
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        // Print the response
+                        console.log(xhr.responseText);
+                    } else {
+                        // If request failed, print error message
+                        console.error('Request failed with status:', xhr.status);
+                    }
+                };
+
+                xhr.onerror = function () {
+                    // Print error message if there is an error with the request
+                    console.error('Request failed');
+                };
+                xhr.send(formData); // Send form data
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+
+    function handleSubmit(event) {
+        event.preventDefault(); // Prevent the form from submitting normally
+        console.log("handleSubmit");
+
+        var cardName = document.getElementById('cardName').value;
+        var cardNumber = document.getElementById('cardNumber').value;
+        var expiryDate = document.getElementById('expiryDate').value;
+        var cvv = document.getElementById('cvv').value;
+
+        // Log form values to console
+        console.log('Cardholder Name:', cardName);
+        console.log('Card Number:', cardNumber);
+        console.log('Expiry Date:', expiryDate);
+        console.log('CVV:', cvv);
+
+        submitDDC(cardNumber);
+    }
+
+    window.addEventListener("message", function (event) {
+        if (event.origin === "https://centinelapistag.cardinalcommerce.com") {
+            var data = JSON.parse(event.data);
+            console.warn('Merchant received a message:', data);
+            if (data !== undefined && data.Status) {
+                // Extract the value of SessionId for onward processing.
+            }
+        }
+    }, false);
+
+    // Create JWT Token
+    // Base64 URL encode function
+    function base64url(source) {
+        // Encode in traditional base64
+        let encodedSource = window.btoa(source);
+        // Replace characters according to JWT spec
+        return encodedSource.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    }
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0,
+                v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    function getEpochTimestampPlusTwoHours() {
+        // Get current time in milliseconds
+        var currentTime = new Date().getTime();
+
+        // Add two hours' worth of milliseconds (2 hours * 60 minutes * 60 seconds * 1000 milliseconds)
+        var twoHoursInMilliseconds = 2 * 60 * 60 * 1000;
+        var newTime = currentTime + twoHoursInMilliseconds;
+
+        // Convert to seconds (since epoch time is typically in seconds)
+        var newTimeInSeconds = Math.floor(newTime / 1000);
+
+        return newTimeInSeconds;
+    }
+
+    function createToken() {
+        try {
+            // Example usage:
+            const payload = {
+                jti: generateUUID(),
+                iat: getEpochTimestampPlusTwoHours(),
+                iss: '65310a27241d9f5ee4eabc28',
+                exp: getEpochTimestampPlusTwoHours(),
+                OrgUnitId: '65310a272ea8fe5867da56b0'
+            };
+
+            const secretKey = '716b7b91-2042-435f-852c-4fffa94e294b';
+
+            // Encode the header and payload
+            const encodedHeader = base64url(JSON.stringify({ typ: 'JWT', alg: 'HS256' }));
+            const encodedPayload = base64url(JSON.stringify(payload));
+
+            // Combine the encoded header and payload
+            const token = `${encodedHeader}.${encodedPayload}`;
+
+            // Sign the token
+            return new Promise((resolve, reject) => {
+                window.crypto.subtle.importKey(
+                    'raw',
+                    new TextEncoder().encode(secretKey),
+                    { name: 'HMAC', hash: { name: 'SHA-256' } },
+                    false,
+                    ['sign']
+                ).then(key => {
+                    return window.crypto.subtle.sign(
+                        { name: 'HMAC' },
+                        key,
+                        new TextEncoder().encode(token)
+                    );
+                }).then(signature => {
+                    // Encode the signature and append to the token
+                    const encodedSignature = base64url(new Uint8Array(signature));
+                    const jwtToken = `${token}.${encodedSignature}`;
+                    resolve(jwtToken);
+                }).catch(error => {
+                    reject(error);
+                });
+            });
+        } catch (error) {
+            console.error('Error creating token:', error);
+            return Promise.reject(error);
+        }
+    }
+</script>
+
+</body>
+</html>

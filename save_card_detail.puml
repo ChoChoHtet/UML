@@ -1,0 +1,188 @@
+@startuml
+autonumber
+skinparam BoxPadding 10
+
+title Card Form x Direct Charge via Worldpay Direct Integration
+
+actor user
+participant browser as "Browser"
+participant merchant_system as "Merchant System"
+participant card_form as "Coda Card Form"
+box "Core Pay" #LightBlue
+participant airtime as "Airtime"
+participant airbag as "Airbag"
+participant tmbatch as "TMBatch"
+participant epcgw as "EPCGW"
+end box
+participant tc as "Coda TC"
+participant coda_fraud_service as "Coda Fraud Service"
+participant vault_service as "Vault Service"
+participant worldpay as "Worldpay"
+
+
+user -> browser: Proceed to payment
+browser -> merchant_system: Init Payment
+merchant_system -> airtime: Initiate payment request
+note left
+{
+  "initRequest": {
+    "apiKey": "7e42da3489c",
+    "orderId": "20250514073803",
+    --
+    "enableSavePaymentMethod": true,
+    "displaySavePaymentMethodList": true,
+    "user_initiated": true,
+    "shopper_info": {
+    --
+    }
+  }
+}
+end note
+airtime -> airbag: Initiate payment request
+airbag -> airbag: Generate Transaction Id and save it to EPCSession
+airbag --> airtime: Transaction ID
+airtime --> merchant_system: Transaction ID
+merchant_system --> browser: Return Coda HPP endpoint with transaction ID
+browser -> airtime: Call Coda HPP endpoint (GET /begin)
+airtime -> airbag: Initialize payment
+
+'CHARGE INTENT
+airbag -> tc: Call charge intent (POST /charge-intents) \n with shopper info and showCard flag
+tc --> airbag: Return JWT with shopper info \n and showCard flag
+airbag --> airtime: Return JWT
+airtime --> browser: Return checkout page
+browser -> card_form: Initialize Card Form SDK (includes Fraud Forter JS)
+'card_form -> card_form: Fraud Forter JS \ngenerates fraud_token
+card_form --> browser: Load Card Form Components
+browser --> user: Display checkout page \nwith Card Form (card holder name, number, expiry,\n cvc and saveCard checkbox)
+
+user -[#red]> browser: Enter card details with saveCard checked
+browser -[#red]> card_form: Card details (card holder name, number, expiry, and cvc)
+card_form -> card_form: Validate card details format
+card_form --> browser: Ready for submission
+user -> browser: Click Submit
+browser -> card_form: Invoke SDK function to trigger submit charge request
+
+'DIRECT CHARGE
+card_form -[#red]> tc: Send charge request with card details (card holder name, number, expiry, and cvc) \n(POST /direct/charges - with JWT, Forter token and save card)
+tc -> tc: Validate request
+tc -> tc: Store shopper, payment_method, token \n with status (inactive/TBD)
+
+'PRE-AUTH FRAUD CHECK
+tc -> coda_fraud_service: Pre-auth fraud check
+coda_fraud_service --> tc: Return fraud check result
+break#fec9c9 #fee2e2 Pre-auth fraud check rejected
+tc --> card_form: Return failed response
+card_form --> browser: Return failed response
+browser --> user: Display failed message
+end
+
+'WORLDPAY FIRST PAYMENT REQUEST
+tc -[#red]> worldpay: Send first payment request with card details \n(card holder name, number, expiry, cvc)
+worldpay --> tc: Return Challenge URL or Authorised response
+
+'STORE CARD DETAILS
+tc -> vault_service: Store card details with status(inactive/TBD)
+vault_service -> tc: Return vault_token_id
+
+'CHALLENGE FLOW (aka 3DS)
+opt challenge required
+'tc -> tc: Generate JWT for displaying the challenge page
+tc --> card_form: Return the challenge details (URL, inputs)
+card_form --> browser: Render challenge page
+browser --> user: Display challenge page
+user -> browser: Complete the challenge page
+browser -> tc: Redirect to `ReturnURL`
+'SECOND PAYMENT REQUEST
+tc -> worldpay: Send second payment request
+worldpay --> tc: Return Authorised response
+end
+
+'POST-AUTH FRAUD CHECK
+tc -> coda_fraud_service: Post-auth fraud check
+coda_fraud_service --> tc: Return fraud check result
+break#fec9c9 #fee2e2 Post-auth fraud check rejected
+tc -> worldpay: Cancel payment request
+worldpay --> tc: Cancel payment acknowledgement
+tc --> card_form: Return failed response with status `cancelled`
+card_form --> browser: Return failed response
+browser --> user: Display failed message
+end
+
+'PARTNER CAPTURE REQUEST APPROVAL
+'opt
+'tc -> merchant_system: Send capture request approval
+'merchant_system --> tc: Capture request acknowledgement
+'end
+
+'WORLDPAY CAPTURE REQUEST
+tc -> worldpay: Send capture request
+worldpay --> tc: Capture request acknowledgement
+tc --> card_form: Return direct charge response (status `capture_initiated`)
+...
+
+'PAYMENT_METHOD CREATED
+tc -> vault_service: Activate Card Data
+vault_service -> tc: Acknowledged
+tc->tc: Activate Token, Payment_Method, Shopper record
+
+'NOTIFY PAYMENT_METHOD CREATED
+tc -> epcgw: Send payment method created notification (payment method id)
+epcgw -> airbag: `handleNotification`
+airbag -> merchant_system: `Send payment method created notification (payment method id)`
+
+
+'WORLDPAY CAPTURE NOTIFICATION
+worldpay --> tc: Notify capture result
+tc -> tc: Update charge status to `succeeded`
+
+'TC CHARGE NOTIFICATION
+tc -> epcgw: Send charge status notification
+epcgw -> airbag: `handleNotification`
+airbag -> tc: Get charge details
+tc --> airbag: Return charge details
+alt is status final
+airbag -> airbag: Update transaction status (success/fail)
+else do nothing
+end
+
+'TMBATCH PROCESS
+loop Check charge status
+tmbatch -> tc: Get charge details
+tc --> tmbatch: Return charge details
+    alt is status final
+    tmbatch -> tmbatch: Update transaction status (success/fail)
+    else do nothing
+    end
+
+'AIRTIME CHECK CONFIRM
+loop Status polling
+browser -> airtime: /epc-isconfirm
+airtime -> airbag: `checkConfirm`
+airbag -> airbag: query status
+airbag --> airtime: Return transaction status (success/fail)
+end
+airtime --> browser: Return transaction status (success/fail)
+browser --> user: Display transaction success/failure page
+
+group  Returning Shopper
+user -> browser: Proceed to payment
+browser -> merchant_system: Init Payment
+merchant_system -> airtime: Initiate payment request
+note left
+{
+  "initRequest": {
+    "apiKey": "7e42da3489c",
+    "orderId": "20250514073803",
+    --
+    "enableSavePaymentMethod": true,
+    "displaySavePaymentMethodList": true,
+    "user_initiated": true,
+    shopper_id: "1234458999"
+  }
+}
+end note
+airtime -> airbag: Repeat Steps 4-10
+airbag -[#yellow]> tc: Call charge intent (POST /charge-intents) \n with shopper_id and save card flag
+end
+@enduml

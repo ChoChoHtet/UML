@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3DS Page Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+
+        .container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    <h2>3DS Simulator</h2>
+    <form id="otpForm">
+        <input type="text" id="otp" name="otp" placeholder="Enter your OTP" required>
+        <button type="submit">Submit</button>
+    </form>
+</div>
+
+<script>
+    document.getElementById('otpForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const data = new URLSearchParams();
+        data.append('TransactionId', '8801dfba-f12d-40da-810f-b6949c03ca95');
+        data.append('Response', '');
+        data.append('MD', 'chg_sg18fcd92290d0000');
+
+        fetch('http://localhost:8080/mocks/return-url', {
+            method: 'POST',
+            body: data,
+            mode: 'no-cors',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+        })
+            .then(response => {
+                console.log("Response: " + JSON.stringify(response));
+                window.location.href = "https://nlb-int-tokenized-sgp-coda-paypci-qa.codapay.net/mocks/return-url";
+            })
+            .catch(error => console.error('Error:', error));
+    });
+</script>
+</body>
+
+</html>

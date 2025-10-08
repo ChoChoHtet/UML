@@ -1,0 +1,103 @@
+@startuml CodaTC_HcState_Complete_Update_Flow
+
+!theme plain
+title CodaTC HcState Complete Page Update Flow
+
+participant "CodaTC Gateway" as CG
+participant "CodaTCNotificationAcceptor" as NA
+participant "EPCCircuitBreakerUtils" as EPCGW
+participant "CardConfirmTxn" as CCT
+participant "Database" as DB
+participant "Frontend" as FE
+participant "GetPaymentStatusHttpServlet" as GPS
+participant "GetComputedHcState" as GCS
+participant "GetCompletedHtmlWithDynamicContent" as GCHDC
+participant "HcStateActionManager" as HSA
+participant "PutHcData" as PHD
+participant "ApplyActivePageAndIndex" as AAP
+participant "HcState" as HS
+
+== Payment Completion Phase ==
+group Payment Gateway Notification
+    CG -> NA ++: POST /epcgw/codatc/notification
+    note right: Webhook with payment success
+    NA -> NA: validateSignature()
+    NA -> NA: parseRequest() → CodaTCReq
+    NA -> EPCGW ++: circuitBreakerEPCGWCardConfirm()
+    EPCGW -> CCT ++: handleSuccess(EPCSessionTxn)
+    CCT -> CCT: txn.setStatus(TxnStatus.Confirmed)
+    CCT -> CCT: txn.setResultCode(ResultCode.Success)
+    CCT -> DB: saveOrUpdateCompleteTxn()
+    CCT -> DB: deleteTxn() // Remove from pending
+    CCT --> EPCGW --: SimpleMapResponse(SUCCESS)
+    EPCGW --> NA --: SimpleMapResponse(SUCCESS)
+    NA --> CG --: HTTP 200 OK
+end
+
+== Frontend Status Polling Phase ==
+group Status Check and Decision
+    FE -> GPS ++: GET /get-payment-status?TxnId=X
+    GPS -> GCS ++: apply(txn, httpServletContext)
+
+    GCS -> GCS: isStatusMoreThanWaitToConfirm = txn.getStatus() > 3
+    GCS -> GCS: isCollectableFailedResultCode = ResultCodeUtil.isCollectableFailedResultCode(txn)
+
+    alt Transaction Complete: status > 3 OR failed result code
+        note over GCS: Condition met: Transaction is complete
+        GCS -> GCHDC ++: apply(httpServletContext, txn)
+        GCHDC -> GCHDC: generateCompletionContent()
+        GCHDC --> GCS --: HtmlWithDynamicContent
+
+        GCS -> GCS: manageFinalPage()
+        note over GCS #yellow: **CRITICAL METHOD**
+        GCS -> GCS: getStringStringHashMap(txn, htmlContent)
+
+        alt ResultCode == SUCCESS
+            GCS -> GCS: map.put("HC_DATA_KEY_ACTIVE_PAGE_NAME", "COMPLETED")
+            note right #lightgreen: **KEY DECISION: Set page to COMPLETED**
+        else Failed Result Code
+            GCS -> GCS: map.put("HC_DATA_KEY_ACTIVE_PAGE_NAME", "FAILED")
+        end
+
+        GCS -> GCS: hcStateActionContext.setPutDataMap(map)
+        GCS -> HSA ++: universalHcStateAction(PUT_HC_DATA)
+    else Transaction Still Pending
+        note over GCS: Condition not met: Continue current state
+        GCS -> HSA ++: universalHcStateAction(GET_COMPUTED_HC_STATE)
+    end
+end
+
+== HcState Update Phase ==
+group Data Application and State Update
+    HSA -> HSA: executePutHcData(context, txn)
+    HSA -> PHD ++: apply(txn, putDataMap)
+    PHD -> AAP ++: accept(hcState, dataMap, logMsg)
+
+    AAP -> AAP: activePageNameOptional = dataMap.get("HC_DATA_KEY_ACTIVE_PAGE_NAME")
+    AAP -> AAP: PageName.forName("COMPLETED")
+    note right: Convert string to PageName enum
+
+    AAP -> HS ++: setActivePageIndexByPageName(PageName.COMPLETED)
+    HS -> HS: findPageIndexByName("COMPLETED")
+    HS -> HS: this.activePageIndex = foundIndex
+    note right #lightblue: **FINAL UPDATE: activePageIndex set**
+    HS --> AAP --: Page index updated
+
+    AAP -> AAP: setActiveStep(hcState, dataMap)
+    AAP --> PHD --: HcState updated
+    PHD -> DB: updateTxnHc(txnId, updatedHcState)
+    PHD --> HSA --: Data applied successfully
+    HSA --> GCS --: SimpleMapResponse(SUCCESS, updatedTxn)
+    GCS --> GPS --: Updated AbsSessionTxn
+end
+
+== Response Phase ==
+group Frontend Response
+    GPS -> GPS: buildHcStateResponse(txn.getHc().getState())
+    GPS --> FE --: JSON Response with activePage: "COMPLETED"
+    FE -> FE: checkIfConfirm(data.status > 3)
+    FE -> FE: displaySuccessPage()
+    FE -> FE: stopPolling()
+end
+
+@enduml

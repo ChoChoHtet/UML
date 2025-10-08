@@ -1,0 +1,82 @@
+@startuml
+
+autonumber
+
+title Mada Tokenization
+
+actor s as "Shopper"
+
+participant u as "Browser"
+participant p as "Partner"
+participant c as "TC BE"
+participant cf as "TC FE"
+participant g as "Gateway"
+participant b as "Bank"
+
+s -> u++: Click one Click Button
+    u -> p++: Trigger Create Tokenization
+        p -> c++: POST /tokens
+            c -> g++: POST /session
+            return session.id
+            c -> c: Build CheckoutURL with session.id
+        return Token status = waiting_for_shopper_action \n with CheckoutURL
+    return Redirect to CheckoutURL
+
+    u -> cf++: Open CheckoutURL
+    return Checkout Page with Gateway SDK
+
+    u -> g++: Open Gateway Checkout
+    return Gateway Checkout
+return Card Form
+
+s -> u++: Input and send Card Detail
+    u -> g++: Send Card Detail
+    return Bank Challenge URL
+    u -> b++: Open Bank Challenge Page
+    return Bank Challenge Page
+return Bank Challenge Page
+
+s -> u++: Attempt Bank Challenge (Input OTP)
+    u -> b++: Submit OTP
+    return Coda Return Page URL
+    u -> cf++: Open Coda Return Page
+    return Coda Return Page
+return Coda Return Page
+
+g -> c++: POST /adapter/snb/webhook "checkout flow completed"
+    c -> g++: Refund
+    return Success
+    c -> g++: POST /token
+    return token
+    c -> c: Update token status to be Authorized
+    c -> p++: Send notification to Partner token.status = Authorized
+    return Accepted
+return Accepted
+
+p -> c++: POST /charge
+    c -> g++: POST /session Create 2nd-Session with Empty body
+    return 2nd-session.id
+    c -> g++: PUT /session/{2nd-session.id} with token in sourceOfFunds.token
+    return Updated 2nd-session.id
+    c -> g++: Initialize Authentication
+    return Initialize Authentication Response
+    c -> g++: Authenticate Payer
+    return HTML Element for Bank Challenge
+    c -> c: Build Challenge Page with Embedded HTML Element
+return Charge status = waiting_for_shopper_action \n with ChallengeURL
+
+u -> cf++: Open ChallengeURL
+return Challenge Page
+u -> b++: Open Bank Challenge page
+return Bank Challenge page
+u -> b++: Attempt Challenge
+return Challenge success page
+
+g -> c++: POST /webhook/snb "Challenge completed"
+    c -> g++: PAY
+    return Pay response
+    c -> p++: POST /partner/webhook/url charge status update -> succeeded
+    return Accepted
+return Accepted
+
+@enduml

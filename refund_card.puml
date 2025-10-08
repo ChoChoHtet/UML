@@ -1,0 +1,115 @@
+@startuml
+participant partner as "Partner"
+participant tc as "TC"
+participant legacy as "Pay Legacy"
+participant crm as "CRM"
+participant wp as "WorldPay"
+autonumber
+
+partner -> tc ++: /refunds
+
+group validate refund
+    tc -> tc : validate refund request
+    note right
+        validate amount from tc record
+        and amount (not exceed original amount)
+    end note
+end
+
+alt failed validation case
+    tc --> partner: failed response
+else
+    group WorldPay Refund
+        tc -> tc : check provider of charge == WorldPay && charge_status == "succeeded"
+        tc -> wp ++: order modification
+        note right
+            <paymentService version="1.4" merchantCode="YOUR_MERCHANT_CODE">
+              <modify>
+                <orderModification orderCode="chargeId">
+                  <refund reference=" code for validation in notification">
+                    <amount value="12720" currencyCode="EUR" exponent="2" debitCreditIndicator="credit"/>
+                  </refund>
+                </orderModification>
+              </modify>
+            </paymentService>
+        end note
+        return order modification response
+        tc --> partner: accepted response
+        wp -> tc: Webhook Response Refund Status
+        note right
+            status = SENT_FOR_REFUND
+        end note
+        alt provider success case (assuming WorldPay does not over refund)
+            wp -> tc: Webhook Response Refund Status
+            note right
+                status = REFUNDED / REFUNDED_BY_MERCHANT
+            end note
+            tc -> legacy ++: add refund txn / modify refund status for completeTxn
+            legacy -> legacy: save refund record
+            note right
+                refund txn status = "succeeded"
+                complete txn status = "partially refunded / refunded"
+            end note
+           return
+           tc -> tc: update refund as success / charge status = refunded?
+           tc -> partner: webhook for success refund
+        else provider failed
+            wp -> tc: Webhook Response Refund Status
+            note right
+                status = REFUND_FAILED (need to let WP configure)
+            end note
+           tc -> tc :save refund request for CRM query
+           crm -> tc: get /refunds (those that have status_code = provider_failed)
+           crm -> crm: approve / failed refund (manual)
+           note right
+                refund page
+           end note
+           crm --> tc: patch /refunds
+           tc -> tc: update refund status
+           tc -> partner: webhook for success/failed refund
+            tc -> legacy ++: add refund txn / modify refund status for completeTxn
+            legacy -> legacy: save refund record
+            note right
+                refund txn status = "succeeded"
+                complete txn status = "partially refunded / refunded"
+            end note
+            return
+        end
+    end
+else
+group Normal Legacy Refund
+tc -> tc : check provider of charge != WorldPay
+end group
+end
+group WorldPay Cancel
+
+partner -> tc : /cancels
+group validate cancel
+    tc -> tc : validate cancel request
+    note right
+        validate cancel full amount request
+    check provider of charge == WorldPay && charge_status == "authorized"
+    end note
+end
+        tc -> wp ++: order modification
+        note right
+<paymentService version="1.4" merchantCode="YOUR_MERCHANT_CODE">
+  <modify>
+    <orderModification orderCode="YOUR_ORDER_CODE">
+      <cancel/>
+    </orderModification>
+  </modify>
+</paymentService>
+        end note
+        return order modification response
+        tc --> partner: accepted response
+        wp -> tc: Webhook Response cancel Status
+        note right
+            status = "CANCEL" / "CANCEL_FAILED" (need to let WP configure)
+        end note
+        tc -> tc: update cancel status / charge status == "cancelled"?
+        tc -> partner: webhook for success/failed cancel
+partner -> tc: get /cancels/{cancelId}
+return
+   end group
+@enduml

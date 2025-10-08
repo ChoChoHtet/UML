@@ -1,0 +1,238 @@
+# Saved Card Journey - Sequence Diagram
+
+## Complete Flow Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CardForm as CardForm Component
+    participant ParentWindow as Parent Window
+    participant TokenizedCharge as TokenizedCharge Service
+    participant TCAPI as TokenizedCharge API
+    participant SavedCards as SavedCards Component
+    participant SavedCardItem as SavedCardItem Component
+    participant CardSecurityCode as CardSecurityCode Component
+    participant Experimentation as Experimentation Service
+    participant Analytics as Analytics Service
+
+    Note over User, Analytics: 1. INITIALIZATION PHASE
+    User->>CardForm: Page Load
+    CardForm->>CardForm: onMounted()
+    CardForm->>CardForm: Check enableSaveCardUI & displaySaveCardRef
+    CardForm->>Experimentation: Check EXPT_ENABLE_SAVE_PAYMENT_METHOD
+    CardForm->>CardForm: getSavePaymentMethodSettings()
+    CardForm->>CardForm: getShopperDetails()
+
+    alt Save Card UI Enabled
+        CardForm->>ParentWindow: postMessage(REQUEST_CLIENT_SECRET)
+        ParentWindow->>CardForm: postMessage(CLIENT_SECRET_RESPONSE, clientSecret)
+
+        Note over CardForm, TCAPI: 2. SAVED CARDS LOADING PHASE
+        CardForm->>CardForm: isLoadingSavedCards = true
+        CardForm->>TokenizedCharge: getPaymentMethods(clientSecret)
+        TokenizedCharge->>TokenizedCharge: decodeJwtToken(clientSecret)
+        TokenizedCharge->>TokenizedCharge: extract shopperId & partnerCustomData
+        TokenizedCharge->>TCAPI: GET /v1/pub/shoppers/{shopperId}/payment-methods
+        TCAPI-->>TokenizedCharge: PaymentMethodsResponse
+        TokenizedCharge-->>CardForm: PaymentMethodsResponse
+
+        alt Cards Found
+            CardForm->>CardForm: savedCards = response.items.map(item => item.card)
+            CardForm->>CardForm: selectedSavedCard = savedCards[0]
+            CardForm->>CardForm: showNewCardForm = false
+            CardForm->>SavedCards: Render with cards data
+            SavedCards->>SavedCards: internalCards = [...cards]
+            SavedCards->>Analytics: cardFormSavedCardListDisplayed
+            SavedCards->>SavedCardItem: Render each card item
+            SavedCardItem->>SavedCardItem: getCardBrand(first_six)
+            SavedCardItem->>SavedCardItem: Display card brand logo & details
+        else No Cards Found
+            CardForm->>CardForm: savedCards = []
+            CardForm->>CardForm: showNewCardForm = true
+            CardForm->>SavedCards: Render empty state
+        end
+
+        CardForm->>CardForm: isLoadingSavedCards = false
+    else Save Card UI Disabled
+        CardForm->>CardForm: showNewCardForm = true
+    end
+
+    Note over User, Analytics: 3. SAVED CARD SELECTION PHASE
+    User->>SavedCardItem: Click on saved card
+    SavedCardItem->>SavedCards: emit('select-payment-method', card)
+    SavedCards->>CardForm: handleSavedCardSelect(card)
+    CardForm->>CardForm: selectedSavedCard = card
+    CardForm->>CardForm: showNewCardForm = false
+    CardForm->>CardForm: cvvMap = {}
+    CardForm->>CardForm: sendFormReadinessState(false)
+    CardForm->>Analytics: cardFormSwitchToSavedCardClicked
+    CardForm->>Analytics: cardFormSavedCardSelected
+
+    SavedCardItem->>SavedCardItem: Show CVV input field
+    SavedCardItem->>CardSecurityCode: Render CVV input component
+
+    Note over User, Analytics: 4. CVV INPUT PHASE
+    User->>CardSecurityCode: Enter CVV
+    CardSecurityCode->>SavedCardItem: emit('cvv-change', payment_method_id, cvv)
+    SavedCardItem->>SavedCards: emit('saved-card-cvv-change', payment_method_id, cvv)
+    SavedCards->>CardForm: handleSavedCardCvvChange(payment_method_id, cvv)
+    CardForm->>CardForm: cvvMap[payment_method_id] = cvv
+
+    CardSecurityCode->>SavedCardItem: emit('error-state-changed', payment_method_id, state)
+    SavedCardItem->>SavedCards: emit('error-state-changed', payment_method_id, state)
+    SavedCards->>CardForm: handleSavedCardsErrorStateChanged(payment_method_id, state)
+
+    alt CVV Valid
+        CardForm->>CardForm: sendFormReadinessState(true)
+    else CVV Invalid
+        CardForm->>CardForm: sendFormReadinessState(false)
+    end
+
+    Note over User, Analytics: 5. PAYMENT SUBMISSION PHASE
+    User->>CardForm: Submit payment
+    CardForm->>CardForm: submitForm(clientSecret)
+    CardForm->>Analytics: cardFormSubmitInvoked (isSavedCard: true)
+
+    CardForm->>TokenizedCharge: callDirectChargeByPaymentMethod(clientSecret, forterToken, savedCards, paymentMethodId, cvv)
+    TokenizedCharge->>TokenizedCharge: decodeJwtToken(clientSecret)
+    TokenizedCharge->>TokenizedCharge: buildDirectChargeRequest with payment method
+    TokenizedCharge->>TCAPI: POST /v1/pub/direct/charges
+    TCAPI-->>TokenizedCharge: Charge Response
+    TokenizedCharge-->>CardForm: Charge Response
+
+    alt Payment Success
+        CardForm->>Analytics: cardFormSubmitSuccess
+    else Payment Failed
+        CardForm->>Analytics: cardFormSubmitFail
+    end
+
+    Note over User, Analytics: 6. SAVED CARD REMOVAL PHASE
+    User->>SavedCardItem: Click delete button
+    SavedCardItem->>SavedCards: emit('delete-click', card)
+    SavedCards->>CardForm: handleDeleteClick(card)
+    SavedCards->>SavedCards: cardToDelete = card
+    SavedCards->>Analytics: cardFormSavedCardRemoveClicked
+    SavedCards->>SavedCards: Show ConfirmationModal
+
+    User->>SavedCards: Confirm deletion
+    SavedCards->>SavedCards: handleDeleteConfirm()
+    SavedCards->>CardForm: emit('remove-payment-method', card)
+    SavedCards->>Analytics: cardFormSavedCardRemoveConfirmed
+
+    CardForm->>CardForm: handleSavedCardRemove(card)
+    CardForm->>CardForm: Remove card from savedCards array
+    CardForm->>CardForm: showSnackbar = true
+
+    alt Removing Currently Selected Card
+        CardForm->>CardForm: resetCardFields()
+        CardForm->>CardForm: selectedSavedCard = undefined
+        CardForm->>CardForm: showNewCardForm = true
+    end
+
+    alt No Cards Left
+        CardForm->>CardForm: selectedSavedCard = undefined
+        CardForm->>CardForm: showNewCardForm = true
+    end
+
+    CardForm->>TokenizedCharge: callRemovePaymentMethod(clientSecret, paymentMethodId)
+    TokenizedCharge->>TCAPI: DELETE /v1/pub/payment-methods/{paymentMethodId}
+    TCAPI-->>TokenizedCharge: Remove Response
+    TokenizedCharge-->>CardForm: Remove Response
+
+    CardForm->>CardForm: Display success snackbar
+    CardForm->>Analytics: cardDeletedSuccessfully
+
+    Note over User, Analytics: 7. SWITCH TO NEW CARD PHASE
+    User->>CardForm: Click "Pay with new card"
+    CardForm->>CardForm: payWithNewCardCliked()
+    CardForm->>CardForm: showNewCardForm = true
+    CardForm->>CardForm: selectedSavedCard = undefined
+    CardForm->>CardForm: cvvMap = {}
+    CardForm->>Analytics: cardFormNewCardFormDisplayed
+    CardForm->>CardForm: sendFormReadinessState(isAllCompletedAndValid)
+```
+
+## Key Components and Their Roles
+
+### 1. **CardForm Component** (Main Controller)
+- Manages the overall state of saved cards
+- Handles communication with parent window
+- Coordinates between different components
+- Manages loading states and error handling
+
+### 2. **SavedCards Component** (List Manager)
+- Displays the list of saved cards
+- Handles card selection and deletion UI
+- Manages confirmation modals
+- Emits events to parent CardForm
+
+### 3. **SavedCardItem Component** (Individual Card)
+- Renders individual saved card
+- Handles card selection
+- Manages CVV input for selected card
+- Displays card brand and details
+
+### 4. **TokenizedCharge Service** (API Layer)
+- Handles all API communications
+- Manages JWT token processing
+- Handles payment method operations
+- Provides error handling and timeouts
+
+### 5. **Parent Window** (External Controller)
+- Provides client secret for API calls
+- Controls when saved cards should be loaded
+- Manages iframe communication
+
+## Critical Timing Points
+
+### **Potential Delay Sources:**
+
+1. **Client Secret Request** (Steps 1-2)
+   - Message passing between iframe and parent
+   - Parent window processing time
+
+2. **API Call** (Step 2)
+   - Network latency to TokenizedCharge API
+   - Server processing time (10-second timeout)
+   - Database queries for payment methods
+
+3. **Component Rendering** (Step 2)
+   - Vue reactivity updates
+   - Multiple component renders
+   - Card brand image loading
+
+4. **CVV Validation** (Step 4)
+   - Real-time validation processing
+   - Error state management
+
+## Error Handling Flow
+
+```mermaid
+sequenceDiagram
+    participant CardForm
+    participant TokenizedCharge
+    participant TCAPI
+
+    CardForm->>TokenizedCharge: getPaymentMethods(clientSecret)
+    TokenizedCharge->>TCAPI: GET /payment-methods
+
+    alt API Error
+        TCAPI-->>TokenizedCharge: Error Response
+        TokenizedCharge-->>CardForm: Error
+        CardForm->>CardForm: paymentMethodsErrorMessage = 'fetchSavedCardsError'
+        CardForm->>CardForm: savedCards = []
+        CardForm->>CardForm: showNewCardForm = true
+        CardForm->>CardForm: isLoadingSavedCards = false
+    else Timeout
+        TokenizedCharge-->>CardForm: Timeout Error
+        CardForm->>CardForm: Handle timeout (10s)
+    end
+```
+
+## Performance Optimization Opportunities
+
+1. **Parallel Loading**: Start loading saved cards immediately on mount
+2. **Caching**: Cache payment methods to avoid repeated API calls
+3. **Progressive Loading**: Load cards in batches for large lists
+4. **Preloading**: Preload saved cards data when possible
+5. **Request Deduplication**: Prevent multiple simultaneous requests

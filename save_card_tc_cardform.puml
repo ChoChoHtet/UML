@@ -1,0 +1,179 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+autonumber
+
+actor user
+participant sdk as "Browser"
+participant card_form as "Card Form"
+participant tc as "Coda TC"
+participant fraud as "Fraud Service"
+participant worldpay as "Worldpay"
+
+user -> sdk : first time user
+sdk -> card_form : Initialize Card SDK
+sdk <-- card_form: Load Card Form Components
+user <-- sdk : display card form (card number,expiry,..)
+user -[#red]> sdk : enter card details
+sdk -[#red]>card_form: send card data
+card_form -> card_form : validate card details
+sdk <-- card_form: Ready for payment submission
+user -> sdk : Submit Payment
+sdk -> card_form : Invoke SDK fun to trigger charge request
+card_form -> card_form: extract Charge Intent \n JWT to get shopper Info,\n save payment method
+card_form -> tc: POST direct/charges
+note right
+{
+    ----
+    "payment_method": {
+        "type": "card",
+        "save_payment_method": "null",
+        "card": {
+            "country_code": "MY",
+            "number": "4000000000001091",
+            "holder_name": "test",
+            "expiration_month": "12",
+            "expiration_year": "2034",
+            "security_code": "199"
+        },
+        "shopper": {
+            "email": "",
+            "zip_code": "",
+            "partner_shopper_id": "{\"userId\":\"667793765\",\"zoneId\":\"8666\"}"
+        }
+    }
+}
+end note
+tc -> tc : validate request
+tc -> tc : create charge ,\n token, payment method , \n shopper
+tc -> fraud: pre-auth fraud check
+tc <-- fraud: success of fraud check
+break#fec9c9 #fee2e2 Pre-auth fraud check rejected
+tc --> card_form: Return failed response
+card_form --> sdk: Return failed response
+sdk --> user: Display failed message
+end
+tc -> worldpay : send first payment request
+tc <-- worldpay: return authorized or Challenge URL
+tc -[#red]> tc: Store Card Data to Vault DB ????
+opt challenge required
+'tc -> tc: Generate JWT for displaying the challenge page
+tc --> card_form: Return the challenge details (URL, inputs)
+card_form --> sdk: Render challenge page
+sdk --> user: Display challenge page
+user -> sdk: Complete the challenge page
+sdk -> tc: Redirect to `ReturnURL`
+'SECOND PAYMENT REQUEST
+tc -> worldpay: Send second payment request
+worldpay --> tc: Return Authorised response
+end
+tc -> fraud: Post-auth fraud check
+tc <-- fraud: return post fraud check result
+break#fec9c9 #fee2e2 Post-auth fraud check rejected
+tc -> worldpay: Cancel payment request
+worldpay --> tc: Cancel payment acknowledgement
+tc --> card_form: Return failed response with status `cancelled`
+card_form --> sdk: Return failed response
+sdk --> user: Display failed message
+end
+
+tc -> worldpay: send capture request
+tc <-- worldpay: return capture response
+tc -[#red]> tc: Store Card Data to Vault DB
+tc -> card_form : return direct API Response
+group Returning User
+user -> sdk: second time payment
+sdk -> card_form : Initialize Card SDK
+sdk <-- card_form: Load Card Form Components(\ndisplayPaymentMethod=true\nenableSavePaymentMethod=true)
+card_form -> card_form: GET /paymentMethodList/{shopper_id}
+sdk <-- card_form: Display list of payment method
+note left
+[
+  {
+    "id": "pmt_sg196dede555a0000",
+    "created_at": "2025-05-17T15:30:34.970413279Z",
+    "shopper_id": "shp_sg196dede203d0000",
+    "type": "card",
+    "save_payment_method": true,
+    "card": {
+      "id": "crd_sg196dede55a30000",
+      "created_at": "2025-05-17T15:30:35.043541298Z",
+      "country_code": "SA",
+      "payment_method_id": "pmt_sg196dede555a0000",
+      "last_four": null,
+      "first_six": null,
+      "holder_name": null,
+      "expiration_month": null,
+      "expiration_year": null
+    }
+  },
+  {
+    "id": "pmt_sg196dede555a0000",
+    "created_at": "2025-05-17T15:30:34.970413279Z",
+    "shopper_id": "shp_sg196dede203d0000",
+    "type": "card",
+    "save_payment_method": true,
+    "card": {
+      "id": "crd_sg196dede55a30000",
+      "created_at": "2025-05-17T15:30:35.043541298Z",
+      "country_code": "SA",
+      "payment_method_id": "pmt_sg196dede555a0000",
+      -------
+    }
+  }
+]
+end note
+opt Select Saved Payment Method
+user -> sdk : Select Payment "pmt_sg196dede555a0000"
+sdk -> card_form: Select Payment "pmt_sg196dede555a0000"
+card_form -> card_form: Validate selected card
+sdk <-- card_form: Ready for payment submission
+user -> sdk: Submit payment
+sdk -> card_form : Invoke SDK fun to trigger charge request
+card_form -> card_form: extract Charge Intent \n JWT to get shopper Info,\n save payment method
+alt validate If shopper_id and  \n payment_method_id contain in JWT data
+card_form -[#blue]> card_form: Extract payment_method_id and \n shopper_id
+card_form -[#blue]> tc: POST direct/charges
+note left
+ {
+      ----
+      "payment_method": {
+          "id": "pmt_12344",
+          "card": {
+              "security_code": "199"
+          },
+          "shopper": {
+             "id": "shp_1234"
+          }
+      }
+      ---
+  }
+
+end note
+tc -[#blue]>tc: validate direct charge request
+
+tc -[#blue]> tc : If payment_method_id present, \n skip payment method creation \n if shopper_id exist \n skip shopper creation
+tc -[#blue]> tc : Get payment_method and shopper info from DB/Vault
+tc -[#blue]> fraud: Repeat Steps 15 to 19: fre-auth fraud check
+tc <[#blue]-- fraud: return pre-auth result
+tc -[#blue]> worldpay: send first payment request
+tc <[#blue]-- worldpay: return authorized or challengeUrl
+else
+tc -[#blue]> user: Repeat Steps 12-40
+end
+end
+opt Remove Saved Payment Method
+user -> sdk : Remove Payment "pmt_sg196dede555a0000"
+sdk -> card_form: Remove Payment "pmt_sg196dede555a0000"
+card_form -> card_form: Validate selected card
+sdk <-- card_form: Ready for payment submission
+user -> sdk : Submit Payment
+sdk -> card_form : Invoke SDK fun to trigger delete payment
+card_form -> tc : DELETE /paymentMethod/{payment_method_id}
+tc -> tc: Update Payment STATUS to DB /Vault DB <TBD>
+card_form <-- tc: Return DELETE Response
+sdk <-- card_form: Display Updated Payment List
+end
+end
+
+@enduml

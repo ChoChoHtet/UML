@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embedded Form</title>
+</head>
+
+<body>
+    <form id="collectionForm" method="POST" action="https://centinelapistag.cardinalcommerce.com/V1/Cruise/Collect">
+        <input id="ddcBin" name="Bin"/>
+        <input id="ddcJwt" name="JWT" />
+    </form>
+    <script>
+        window.addEventListener('message', function(event) {
+            console.log("Message received (DDC): " + JSON.stringify(event.data));
+            var data = event.data;
+            document.getElementById('ddcBin').value = data.bin;
+            document.getElementById('ddcJwt').value = data.jwt;
+
+            document.getElementById("collectionForm").submit();
+        });
+    
+    </script>
+</body>
+</html>

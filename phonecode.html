@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract MSISDN</title>
+    <!-- Include intl-tel-input CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/css/intlTelInput.min.css">
+</head>
+<body>
+<!-- Phone Input Field -->
+<input id="phone" type="tel" placeholder="Enter your phone number">
+
+<!-- Button to Get MSISDN -->
+<button onclick="getMSISDN()">Get MSISDN</button>
+
+<!-- Display MSISDN -->
+<p id="msisdn-output">MSISDN: <span id="msisdn"></span></p>
+<p id="dial-output">Dial Code: <span id="dial-code"></span></p>
+
+<!-- Include intl-tel-input JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
+<script>
+    // Initialize intl-tel-input on the phone input field
+    const phoneInputs = document.querySelector("#phone");
+    phoneInputs.value = "85602055475360"
+    const phoneInput = phoneInputs;
+    const iti = window.intlTelInput(phoneInput, {
+        initialCountry: "auto",
+        utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js",
+        formatAsYouType: false
+    });
+    console.log(iti.getNumber())
+
+    // Function to extract MSISDN
+    function getMSISDN() {
+        const fullNumber = iti.getNumber(); // Gets the full number in E.164 format
+        const dialCode = iti.getSelectedCountryData().dialCode; // Gets the selected country's dial code
+        const msisdn = fullNumber.replace("+" + dialCode, ""); // Removes the dial code
+
+        // Display the MSISDN
+        document.getElementById("msisdn").textContent = msisdn;
+        document.getElementById("dial-code").textContent = dialCode;
+        console.log("MSISDN:", fullNumber); // Log the MSISDN to the console for verification
+        console.log("dialocode", dialCode)
+    }
+</script>
+</body>
+</html>

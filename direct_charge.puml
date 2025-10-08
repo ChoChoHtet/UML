@@ -1,0 +1,24 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+autonumber
+title Direct Charge Simplified Design
+participant p as "Publisher"
+participant c as "API Controller"
+participant chg as "Direct Charge Core"
+participant pm as "Payment Method Core"
+participant sc as "Shopper Core"
+participant s as "Provider Supplier"
+participant cpc as "Provider Charge"
+
+p -> c : direct charge request
+c -> chg: create charge(charge_type=DIRECT)
+
+chg -> pm: persist card info to DB
+chg -> sc : persist shopper info to DB
+chg -> s: Determine Provider(Worldpay,DLocal, etc)
+s -> cpc: create provider charge
+cpc--> chg: charge object
+chg --> c: charge object
+c --> p: charge response
+@enduml

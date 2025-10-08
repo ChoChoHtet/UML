@@ -1,0 +1,95 @@
+@startuml
+autonumber
+title Card Form x Direct Charge via Iyzico Provider
+actor user
+participant merchant as "Merchant"
+participant browser as "Browser"
+participant sdk as "Card SDK"
+participant tc as "TC"
+participant fraud as "Coda Fraud"
+participant provider as "Iyzico Provider"
+box "Core Pay" #LightBlue
+participant gateway as "Gateway"
+participant airbag as "Airbag"
+participant airtime as "Airtime"
+end box
+
+user -> sdk: Enter Card Details
+sdk -> sdk : Validate card details
+sdk --> browser: Ready to submit
+user -> browser: Submit Payment
+browser -> sdk: Invoke submit Direct Charge Request
+sdk -> tc : Send Direct Charge Request\n(POST /direct/charges\n with JWT + forter token)
+tc -> tc: Validate Charge Request
+tc -> tc : Store charge details\n(first 6 and last 4,\n card info , metadata)
+tc -> tc:  Set Charge (txn) providers based on  featureFlag=`tc-direct-charge-card-provider`
+tc -> fraud: Pre-auth fraud check\n(send charge to coda forter token)
+fraud -> fraud: analyze transaction risk
+fraud --> tc: Return fraud generate risk assement
+break#fec9c9 #fee2e2 Pre-auth fraud check rejected
+tc --> sdk: Return failed response\n(status `failed_card_pre_auth_fraud_check_rejected`)
+tc -> gateway: Send webhook notification with status\n `failed_card_pre_auth_fraud_check_rejected`
+gateway -> airbag:  marked txn status\n `RMS_Declined_txn(312)`
+airbag -> airtime : Display Failed txn with error \n`RMS_Declined_txn(312)`
+airtime --> browser: Display Failed txn with error\n `RMS_Declined_txn(312)`
+browser --> user: Display Failed txn with error\n `RMS_Declined_txn(312)`
+end break
+alt#aebae6 #aebae6 Borderline 3DS Enabled (featureFlag=`tc-enable-borderline-3ds`
+alt#aebae6 FRAUD ACTION: CHECK 3DS
+tc -> tc : set charge status=`card_pre_auth_fraud_check_approved`
+tc -> tc: set riskProviderCustomData\n(RISK_PROVIDER_CUSTOM_DATA_FRAUD_SERVICE_ADDL_AUTH_RECOMM = `CHECK_3DS`)
+else FRAUD ACTION: SUCCESS
+tc -> tc : set charge status=`card_pre_auth_fraud_check_approved`
+else FRAUD ACTION: ERROR
+tc -> tc : set charge status=`card_pre_auth_fraud_check_approved`
+end
+else Borderline 3DS Disabled
+tc -> tc : set charge status=`card_pre_auth_fraud_check_approved`
+end
+tc -> tc: determine provider call services (e.g Worldpay,Stripe,Iyzico)
+
+opt#a3990b #a3990b BIN CHECK
+tc -> provider: Send Bin Check Request\n(POST /payment/bin/check)
+tc <--: provider: return force3DS (`0` or `1`)
+alt#d9d273 #d9d273 BIN CHECK = 3DS required ( force3DS=1)
+tc -> tc: check FraudActionBorderline3DS predicate\n(riskProviderCustomData=`Check3DS`)\nRISK_PROVIDER_CUSTOM_DATA_FRAUD_SERVICE_ADDL_AUTH_RECOMM
+alt#e3e0bc #e3e0bc Fraud Recommendation: CHECK_3DS , 3DS Payment (challenge required)
+tc -> tc: (border3DS=true && CARD_FORM_3DS_DISABLED=false)
+tc -> provider: Send Init 3DS Request\n(POST /payment/3dsecure/initialize)
+provider --> tc: Return: Response with encoded threeDSHtmlContent
+tc -> tc: update charge status `waiting_for_shopper_action`
+tc --> sdk: Return encoded 3DS form
+sdk --> browser: Render 3DS form
+browser --> user: Display 3DS(Challenge Form)
+user -> browser: Submit Challenge-OTP
+provider --> tc: Redirection: Challenge Completed Webhook\n(status, mdStatus)
+break#fec9c9 #fee2e2  MDStatus=0,2,3,4,5,6,7,8 ( FAIL)
+tc -> tc : Update Charge status=`failed`(follow error_mapping)
+end
+tc -> tc: Update Charge status=`processing_shopper_action`
+tc -> provider: Send Auth 3DS Request\n(POST /payment/3dsecure/auth)
+provider --> tc: Return Auth Response
+break#fec9c9 #fee2e2 Failed Payment
+tc -> tc : Update Charge Status `failed` (follow error_mapping)
+end
+tc -> tc: Update Charge Status `pending(TBC)` \n(set provider custom data of payment status)
+else Fraud Recommendation: 3DS NOT Required , Non 3DS Payment
+tc -> provider: Send Create Payment Request\n(POST /payment/auth)
+provider --> tc: Return Success or Fail Response
+break#fec9c9 #fee2e2 Failed Payment
+tc -> tc : Update Charge Status `failed` (follow error_mapping)
+end
+tc -> tc: Update Charge Status `pending (TBC) ` \n(set provider custom data of payment status)
+end
+else BIN CHECK= 3DS NOT REQUIRED( force3DS=0)
+tc -> tc : Repeat Non 3DS Payments Implementation Steps
+end
+end
+
+provider --> tc: Send webhook notification\n(paymentId,status,price,conversationId)
+tc -> tc: Reconcile Payment Status and \n finalize charge status `failed` or `succeeded`
+tc -> provider: Return: OK(200)
+tc -> gateway: send webhook notification
+
+
+@enduml
