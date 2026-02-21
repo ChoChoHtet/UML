@@ -94,11 +94,11 @@ group #E8F5E9 Return to Coda
     provider -> browser: Redirect to Coda's return_url
     browser -> airtime: GET /airtime/jpn/paypay/return?txnid=7712376985402148501
     airtime -> vue: Redirect to /airtime/web-app/begin?txn_id=...
-    vue -> browser: Render Result Page (Payment Successful)
+    vue -> browser: Render Result Page (Payment Successful OR Failed )
 end
 
 group #FFECB3 Async Backend Notification
-    provider -[#blue]> gateway: Callback/Webhook Notification
+    provider -> gateway: Callback/Webhook Notification
     gateway -> airbag: EPCConfirm
     airbag -> merchant: Send Notification Callback (HTTP POST)
 end
