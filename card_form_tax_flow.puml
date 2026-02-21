@@ -1,0 +1,47 @@
+@startuml
+autonumber
+actor user
+participant vue as "Hosted Checkout [Vue3]"
+participant sdk as "Coda Card SDK"
+participant form as "Card Form"
+participant tc as "Tokenized Charge"
+participant airtime as "Airtime"
+participant airbag as "Airbag"
+participant gateway as "Gateway"
+alt#aebae6 #aebae6 Prefilled ZIP Code, if Country = US AND HC ServerAction = clientIpZipCodeBasedTaxAdd AND Client IP Address is present in txnObject then
+vue -> vue: Prefill detected ZIP code in billing information input field\n Note: default fallback ("98001")
+user -> vue: Enter Card Info and Click Pay Now Button
+vue -> sdk: Submit Payment  [event: submit(options={isUpdateTax=false})]
+else Country=Canada OR user manually changes ZIP code (for US)
+user -> vue: [US] Update ZIP Code / [Canada]Select Province Code from DropdownList
+vue -> airtime: POST /airtime/prepare-payment\n{txn_id=123456789,state=CA,zipCode=90210,isUpdateTax=true}
+airtime -> airbag:   1. Store state/province code into txn.ProfileMap\n2. Calculate tax based on state/province code
+airbag -> airbag: Update total price in EPCSession table
+airtime <-- airbag: Return RMI result, etc.
+vue <-- airtime:[Return] OK: {"success":true,"finalPrice":200.23}
+vue -> vue: Display updated price on Checkout page UI
+user -> vue: Enter Card Info and Click Pay Now Button
+vue -> sdk: Submit Payment  [event: submit(options={stateCode,finalPrice,isUpdateTax=true})
+end
+sdk -> form: [event: SUBMIT_FORM_READY]
+form -> tc: POST /direct charge\n(with state and final price)
+tc -> tc: validate JWT Token \n(itemCode,itemName,amount,currency)\n (Note: validate from original price )
+alt#e3e0bc #e3e0bc Required Tokenized Charge (TC) Tax Calculation [isUpdateTax=true and Country in [US,CA]
+tc -> tc: calculate tax based on original price
+tc -> tc: compare between original and final price
+break#fec9c9 #fee2e2 Different from Final Price
+tc -> tc: status=`failed` ( TBC error code)
+tc -> gateway:  Send Failed Callback Notification
+end
+end
+tc -> tc: Update Charge in DB
+tc -> tc: Start from PreAuth Fraud Check and continue with existing flow for processing payment
+tc -> gateway: Send Callback Notification with corresponding status code
+gateway -> airbag : ConfirmTxn
+vue -> airtime: GET /get-payment-status ( Polling here)
+airtime -> vue: Return Final Code
+vue -> user : Display Result Page
+
+
+
+@enduml

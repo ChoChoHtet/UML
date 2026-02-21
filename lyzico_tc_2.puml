@@ -54,7 +54,8 @@ tc -> tc: (border3DS=true && CARD_FORM_3DS_DISABLED=false)
 tc -> provider: Send Init 3DS Request\n(POST /payment/3dsecure/initialize)
 provider --> tc: Return: Response with encoded threeDSHtmlContent
 tc -> tc: update charge status `waiting_for_shopper_action`
-tc --> sdk: Return encoded 3DS form
+tc -> tc: TC decoded Base64 format 3DSHtmlContent from Iyzico rand expose 3dS-challenge API with htmlContent template
+tc --> sdk: Return shopper_action_redirection flow with url (/3ds-challenge)
 sdk --> browser: Render 3DS form
 browser --> user: Display 3DS(Challenge Form)
 user -> browser: Submit Challenge-OTP
@@ -68,25 +69,33 @@ provider --> tc: Return Auth Response
 break#fec9c9 #fee2e2 Failed Payment
 tc -> tc : Update Charge Status `failed` (follow error_mapping)
 end
-tc -> tc: Update Charge Status `pending(TBC)` \n(set provider custom data of payment status)
+tc -> tc: Update Charge Status `authorized` \n(set provider custom data of payment status)
 else Fraud Recommendation: 3DS NOT Required , Non 3DS Payment
 tc -> provider: Send Create Payment Request\n(POST /payment/auth)
 provider --> tc: Return Success or Fail Response
 break#fec9c9 #fee2e2 Failed Payment
 tc -> tc : Update Charge Status `failed` (follow error_mapping)
 end
-tc -> tc: Update Charge Status `pending (TBC) ` \n(set provider custom data of payment status)
+tc -> tc: Update Charge Status `authorized` \n(set provider custom data of payment status)
 end
 
 
 
 provider --> tc: Send webhook notification\n(paymentId,status,price,conversationId)
-tc -> tc: Reconcile Payment Status and \n finalize charge status `failed` or `succeeded`
+tc -> tc: Check Txn expiry From Redis cache
+break#fec9c9 #fee2e2 Txn Expiry (15 min)
+tc -> provider: Send the Cancel Request
+tc <--provider: Return: status=`success`
+tc -> tc: Update Charge Status: `cancelled`
+end
+
+tc -> tc: Check status between API response and notification are the same or not (paymentId,status,price)
+alt Finalized Charge Status - Matched
+tc -> tc : Update charge status=`succeeded`
+else Not Matched
+tc -> tc : Update charge negative status accordingly
+end
 tc -> provider: Return: OK(200)
 tc -> gateway: send webhook notification
-
-
-
-
 
 @enduml

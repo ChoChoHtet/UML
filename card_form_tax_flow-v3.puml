@@ -1,0 +1,136 @@
+@startuml
+autonumber
+actor user
+participant merchant as "Merchant (Codashop)"
+participant airtime as "Airtime"
+participant airbag as "Airbag"
+participant vue as "Hosted Checkout [Vue3]"
+participant sdk as "Coda Card SDK"
+participant form as "Card Form"
+participant tc as "Tokenized Charge"
+participant gateway as "Gateway"
+' Merchant Initiates Payment
+alt Merchant Initiates Payment with ZIP and Tax Info Provided
+merchant -> airtime: <b>POST /Payment/init</b>\nitemPrice=10.59\nprofile={zip=200257, tax=0.6, tax_rate=6.0}
+
+airtime -> airtime: <b>Init Request Validation</b>\n- profile contains tax & tax_rate\n- Country = US/CA\n- Adjust to tax-exclusive\n totalPrice = itemPrice(10.59) - tax(0.6) → <b>9.99</b>
+
+airtime -> airtime: <b>saveTaxAndStateToTxnProfile()</b>\nStores: tax="0.6", tax_rate="6.0", state="DC",<color:red>pst="1",gst="2"</color>
+
+airtime -> airbag: <b>Save Transaction to DB (Tax Exclusive)</b>\nProfile={tax="0.6", tax_rate="6.0", state="DC", <color:red>pst="1", gst="2"</color>}\nTotalPrice = <b>9.99</b> (tax-exclusive)
+end
+
+group InitTxn: Universal Flow - HC Initialization (ASYNC)
+' Airbag Universal Flow / HC Initialization
+airbag -> airbag: Get HCTemplate from PCConfigCache
+airbag -> airbag: <b>Computing HC state</b>
+airbag -> airbag: <b>Identify whether Vue3 should display billing input field or not </b>\n<color:red> if has taxInProfile(zip,state,taxInfo) -> Modify HC ClientAction for PrePaymentForm=null
+group <b>Server Action Processing (Configuration Dependent)</b>
+alt ServerAction = CLIENT_IP_ZIP_CODE_BASED_TAX_ADD
+    alt Country = US AND zipCode & taxRate already exist
+        airbag -> airbag: <color:red>Skip zip code lookup</color>
+    else
+        ' 1. Determine Zip Code
+        airbag -> airbag: if User IP missing OR Country ≠ US → fallback zip = ""
+        airbag -> airbag: if User IP present → lookup zip via GeoIPManager
+        airbag -> airbag: if zip found → use zip=1234\nelse → fallback zip=""
+        airbag -> airbag: Store resolved zip code in profile
+    end
+
+    ' 2. Tax Calculation
+    airbag -> airbag: Tax Calculation('US', zipcode, tax code, totalPrice)
+
+    airbag -> airbag: <b>updateTaxAndStateToTxnProfile()</b>\nStores: tax="0.6", tax_rate="6.0", state="DC, <color:red>basePrice="9.99"</color>
+
+    ' 3. Adjust Item Price to Tax Inclusive
+    airbag -> airbag: <b>Adjust Item Price with Tax (Tax Inclusive)</b>\ntotalPrice = itemPrice(9.99) + tax(0.6) → <b>10.59</b>
+
+    ' 4. Save Transaction
+    airbag -> airbag: <b>Save Transaction to DB (Tax Inclusive)</b>\ntotalPrice = 10.59
+end
+
+alt ServerAction = DEFAULT_INFO
+airbag -> airbag : if Country=CA -> Tax Calculation based on Default Value
+note right
+{
+  "serverActions": [
+    {
+      "type": "defaultPreparePaymentInfo",
+      "defaultPreparePaymentInfo": {
+        "isAsyncAction": false,
+        "isUpdateTax": true,
+        "defaultValue": {
+          "state": "AB"
+        }
+      }
+    }
+  ]
+}
+end note
+airbag -> airbag: <b>updateTaxAndStateToTxnProfile()</b>\nStores: tax="0.6", tax_rate="6.0", state="DC",<color:red>pst="1",gst="2",basePrice="9.99"</color>
+
+    ' 3. Adjust Item Price to Tax Inclusive
+    airbag -> airbag: <b>Adjust Item Price with Tax (Tax Inclusive)</b>\ntotalPrice = itemPrice(9.99) + tax(0.6) → <b>10.59</b>
+
+    ' 4. Save Transaction
+    airbag -> airbag: <b>Save Transaction to DB (Tax Inclusive)</b>\ntotalPrice = 10.59
+end
+
+    ' Another server action
+alt ServerAction = CREATE_PAYMENT
+    airbag -> tc: <b>Initialize Payment Gateway (CodaTC Init)\n <POST /charge-intent \n{"zip":"200257","amountValue":10.59,<color:red>"basePrice": "9.99","tax":"0.6","tax_rate":"6.0, pst="1, gst="2"</color>}
+    airbag <--tc: Return: {"card_sdk":{"client_secret":"jwt_secret_token  <color:red>(including amountValue ) </color>"}}
+end
+end
+end
+
+airtime <-- airbag: [Return]: OK : TxnId=1234
+merchant <--airtime:[Return]: OK : TxnId=1234
+merchant -> airtime: /begin?txnId=1234
+airtime -> vue: 302: /webapp/begin?txnId=1234
+vue -> airtime: GET /get-txn-details?TxnId=1234
+airtime -> airbag: Processing API
+airtime <--airbag: [Return] OK: txnDetailResponse
+airtime --> vue: [Return] OK: txnDetailResponse
+alt#aebae6 #aebae6 HCState -> PrePaymentForm=NULL
+vue -> vue : Display Checkout Page with billing info input field hidden
+user -> vue: Enter Card Info and Click Pay Now Button
+vue -> sdk: Submit Payment  [event: submit()]
+else Prefilled ZIP Code, if Country = US
+vue -> vue: Prefill detected ZIP code in billing information input field
+user -> vue: Enter Card Info and Click Pay Now Button
+vue -> sdk: Submit Payment  [event: submit(options={isUpdateTax=false})]
+else Country=Canada OR user manually changes ZIP code (for US)
+user -> vue: [US] Update ZIP Code / [Canada]Select Province Code from DropdownList
+vue -> airtime: POST /airtime/prepare-payment\n{txn_id=123456789,state=NY,zipCode=10001,isUpdateTax=true}
+airtime -> airbag: Calculate tax based on zip/province code
+airbag -> airbag: <b>saveTaxAndStateToTxnProfile()</b>\nStores: tax="0.89", tax_rate="8.88", state="NY"
+airbag -> airbag: <b>Save Transaction to DB (Tax Inclusive)</b>\n totalPrice = 10.88
+airtime <-- airbag: Return RMI result, etc.
+vue <-- airtime:[Return] OK: {"success":true,"finalPrice":10.88}
+vue -> vue: Display updated price on Checkout page UI
+user -> vue: Enter Card Info and Click Pay Now Button
+vue -> sdk: Submit Payment  [event: submit(options={stateCode,finalPrice,isUpdateTax=true})
+end
+sdk -> form: [event: SUBMIT_FORM_READY]
+form -> tc: POST /direct charge\n(with zipCode and <color:red>isUpdateTax,provinceCode,finalPrice(Conditional)</color>)
+tc -> tc: validate JWT Token \n(itemCode,itemName,amount,currency)\n (Note: always tax inclusive price,validate from amountValue(original) <color:red>10.59 </color> )
+alt#e3e0bc #e3e0bc Required Tokenized Charge (TC) Tax Calculation [isUpdateTax=true and Country in [US,CA]
+tc -> tc: calculate tax based on <color:red>basePrice and zipCode</color>
+tc -> tc: compare between amountValue and finalPrice
+break#fec9c9 #fee2e2 Different from Final Price
+tc -> tc: status=`failed` ( TBC error code)
+tc -> gateway:  Send Failed Callback Notification
+end
+end
+tc -> tc: Update Charge in DB
+tc -> tc: Start from PreAuth Fraud Check and continue with existing flow for processing payment
+tc -> gateway: Send Callback Notification with corresponding status code
+gateway -> airbag : ConfirmTxn
+vue -> airtime: GET /get-payment-status ( Polling here)
+airtime -> vue: Return Final Code
+vue -> user : Display Result Page
+
+
+
+@enduml

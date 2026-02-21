@@ -88,6 +88,7 @@ end
 
 provider --> tc: Send webhook notification\n(paymentId,status,price,conversationId)
 tc -> tc: Reconcile Payment Status and \n finalize charge status `failed` or `succeeded`
+tc -> tc: Check if txn is expired or not
 tc -> provider: Return: OK(200)
 tc -> gateway: send webhook notification
 

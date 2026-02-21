@@ -1,0 +1,106 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+autonumber
+title Skip Checkout Page Redirect  - Sync vs Async Flow (with Hybrid PC Eligibility)
+
+participant "Browser/App" as browser
+participant merchant as "Merchant"
+participant vue as "Hosted Checkout"
+participant airtime as "Airtime"
+participant airbag as "Airbag"
+participant raison as "Raison"
+participant gateway as "Gateway"
+participant provider as "Provider"
+
+== Initialization Phase ==
+
+merchant -> airtime: POST /Payment/init
+
+group #F2F2F2 EPCInitTxn (initializeTransaction)
+    airtime -> airbag: EPCInitTxn.init()
+
+    note over airbag: Check Feature Flag for Supplier(Merchant) & PC Eligibility
+
+    alt #E8F5E9 Feature Flag: Enabled & PC: Eligible
+        group **SYNC FLOW**: InitializeHC
+            note over airbag, provider: Now waiting for immediate Provider response
+            airbag -> raison : CreatePayment
+            raison -> provider : Payment Gateway Init
+            provider --> raison : 200 OK (redirectUrl)
+            raison -> airbag: txnStatus: WaitToConfirm
+        end
+        airbag --> airtime: { REDIRECT_ENABLED: true, REDIRECT_URL: provider_url }
+        airtime -> merchant: 200 OK
+        note right
+            <initResult>
+                <redirectUrl>https://provider.com/pay</redirectUrl>
+                <resultCode>0</resultCode>
+                <txnId>7712376985402148501</txnId>
+            </initResult>
+        end note
+
+    else #FEF9E7 Feature Flag: Enabled & PC: NOT Eligible
+        group **ASYNC FLOW**: InitializeHC
+            airbag -> raison : CreatePayment
+                       raison -> provider : Payment Gateway Init
+                       provider --> raison : 200 OK (redirectUrl)
+                       raison -> airbag: txnStatus: WaitToConfirm
+        end
+        airbag --> airtime: { REDIRECT_ENABLED: true, REDIRECT_URL: airtime_url }
+        airtime -> merchant: 200 OK
+        note right
+            <initResult>
+                <redirectUrl>https://airtime-sgp.codapayments.com/airtime/web-app/begin?txn_id=7712376985402148501</redirectUrl>
+                <resultCode>0</resultCode>
+                <txnId>7712376985402148501</txnId>
+            </initResult>
+        end note
+
+    else #FEF9E7 Feature Flag: DISABLED
+        group **ASYNC FLOW**: InitializeHC
+             airbag -> raison : CreatePayment
+                        raison -> provider : Payment Gateway Init
+                        provider --> raison : 200 OK (redirectUrl)
+                        raison -> airbag: txnStatus: WaitToConfirm
+        end
+        airbag --> airtime: { REDIRECT_ENABLED: false }
+        airtime -> merchant: 200 OK
+        note right
+            <initResult>
+                <resultCode>0</resultCode>
+                <txnId>7712376985402148501</txnId>
+            </initResult>
+        end note
+    end
+end
+
+== User Payment Process ==
+
+merchant -> browser: Redirect User to redirectUrl (Provider OR Airtime)
+alt Redirected to Airtime
+    browser -> airtime: https://airtime/web-app/begin
+    airtime -> browser: Render Hosted Checkout (Vue)
+    browser -> provider: User clicks "Continue" and goes to Provider
+else #E8F5E9 Redirected to Provider
+    browser -> provider: https://provider.com/pay
+    provider --> browser: Confirm Payments etc
+
+end
+
+== Return & Notification Flow ==
+
+group #E8F5E9 Return to Coda
+    provider -> browser: Redirect to Coda's return_url
+    browser -> airtime: GET /airtime/jpn/paypay/return?txnid=7712376985402148501
+    airtime -> vue: Redirect to /airtime/web-app/begin?txn_id=...
+    vue -> browser: Render Result Page (Payment Successful)
+end
+
+group #FFECB3 Async Backend Notification
+    provider -[#blue]> gateway: Callback/Webhook Notification
+    gateway -> airbag: EPCConfirm
+    airbag -> merchant: Send Notification Callback (HTTP POST)
+end
+
+@enduml
