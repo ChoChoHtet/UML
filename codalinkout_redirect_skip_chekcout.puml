@@ -2,7 +2,7 @@
 'https://plantuml.com/sequence-diagram
 
 autonumber
-title Skip Checkout Page Redirect  - Sync vs Async Flow (with Hybrid PC Eligibility)
+title Skip Checkout Page - Redirect Payment Channel
 
 participant "Browser/App" as browser
 participant merchant as "Merchant"
@@ -11,6 +11,7 @@ participant airtime as "Airtime"
 participant airbag as "Airbag"
 participant raison as "Raison"
 participant gateway as "Gateway"
+participant fraud as "Fraud Service"
 participant provider as "Provider"
 
 == Initialization Phase ==
@@ -20,17 +21,26 @@ merchant -> airtime: POST /Payment/init
 group #F2F2F2 EPCInitTxn (initializeTransaction)
     airtime -> airbag: EPCInitTxn.init()
 
-    note over airbag: Check Feature Flag for Supplier(Merchant) & PC Eligibility
+    note over airbag: GATE CHECK => Feature Flag for Supplier(Merchant) & PC Eligibility
 
-    alt #E8F5E9 Feature Flag: Enabled & PC: Eligible
-        group **SYNC FLOW**: InitializeHC
-            note over airbag, provider: Now waiting for immediate Provider response
-            airbag -> raison : CreatePayment
-            raison -> provider : Payment Gateway Init
-            provider --> raison : 200 OK (redirectUrl)
-            raison -> airbag: txnStatus: WaitToConfirm
-        end
-        airbag --> airtime: { REDIRECT_ENABLED: true, REDIRECT_URL: provider_url }
+    alt #E8F5E9 CASE1: Feature Flag: Enabled & PC: Eligible
+         group **SYNC FLOW**: InitializeHC
+                   note over airbag, provider: Now waiting for immediate Provider response end
+                   airbag -> raison : CreatePayment
+                   group **PreCreatePaymentValidation**
+                   airbag -> airbag: Check\n1. MNOActivation\n2.PreCreatePaymentStatus\n3.AmountLimitCheck
+                        alt GATE CHECK => Feature Flag for Supplier(Merchant) & PC Eligibility
+                        airbag -[#red]> fraud: <b>processing Fraud Risk Check</b>
+                        fraud --[#red]>airbag: 200 OK: ResultCode=SUCCESS
+                        airbag -[#red]> airbag: profileMap["fraudCheckedBeforePaymentInit]=true
+                        end alt
+                   raison -> provider : Payment Gateway Init
+                   provider --> raison : 200 OK (redirectUrl)
+                   raison -> airbag: txnStatus: WaitToConfirm
+                   end group
+         end
+
+airbag --> airtime: { REDIRECT_ENABLED: true, REDIRECT_URL: provider_url }
         airtime -> merchant: 200 OK
         note right
             <initResult>
@@ -39,8 +49,7 @@ group #F2F2F2 EPCInitTxn (initializeTransaction)
                 <txnId>7712376985402148501</txnId>
             </initResult>
         end note
-
-    else #FEF9E7 Feature Flag: Enabled & PC: NOT Eligible
+    else #FEF9E7 CASE2: Feature Flag: Enabled & PC: NOT Eligible
         group **ASYNC FLOW**: InitializeHC
             airbag -> raison : CreatePayment
                        raison -> provider : Payment Gateway Init
@@ -51,13 +60,13 @@ group #F2F2F2 EPCInitTxn (initializeTransaction)
         airtime -> merchant: 200 OK
         note right
             <initResult>
-                <redirectUrl>https://airtime-sgp.codapayments.com/airtime/web-app/begin?txn_id=7712376985402148501</redirectUrl>
+                <redirectUrl>https://airtime-sgp.codapayments.com/airtime/begin?txn_id=123</redirectUrl>
                 <resultCode>0</resultCode>
                 <txnId>7712376985402148501</txnId>
             </initResult>
         end note
 
-    else #FEF9E7 Feature Flag: DISABLED
+    else #FEF9E7 CASE3 Feature Flag: DISABLED
         group **ASYNC FLOW**: InitializeHC
              airbag -> raison : CreatePayment
                         raison -> provider : Payment Gateway Init
@@ -78,15 +87,20 @@ end
 == User Payment Process ==
 
 merchant -> browser: Redirect User to redirectUrl (Provider OR Airtime)
-alt Redirected to Airtime
-    browser -> airtime: https://airtime/web-app/begin
-    airtime -> browser: Render Hosted Checkout (Vue)
-    browser -> provider: User clicks "Continue" and goes to Provider
+alt Redirected to Airtime ( CODA's Hosted Payment Page)
+    browser -> airtime: <b>https://airtime-sgp.codapayments.com/airtime/begin?txn_id=1234</b>
+    airtime -> browser: HTTP 302: Redirect to Vue3 <b>[https://airtime-sgp.codapayments.com/airtime/web-app/begin?txn_id=123]</b>
+    airtime -> airbag: Checkout Manager
+    note over airbag,fraud: Fraud Risk Check on Checkout Page
+    airbag -> fraud: processing Fraud Risk Check
+    airbag <-- fraud: 200 OK: ResultCode=SUCCESS
+    airbag -> airtime: Txn: ResultCode=431
+    airtime -> browser: Coda's Hosted Payment Page Landed
+    browser -> provider: User clicks "Continue" and goes to Provider (https://provider.com/pay)
 else #E8F5E9 Redirected to Provider
     browser -> provider: https://provider.com/pay
-    provider --> browser: Confirm Payments etc
-
 end
+ provider --> browser: Confirm Payments etc
 
 == Return & Notification Flow ==
 
