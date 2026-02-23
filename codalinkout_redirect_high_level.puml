@@ -1,0 +1,51 @@
+@startuml
+autonumber
+title Skip Checkout Page - Redirect High Level
+
+actor User
+participant "Browser/App" as browser
+participant "Merchant Server" as merchant
+participant "Codapay" as pay
+participant "Fraud Service" as fraud
+participant "Payment Provider" as provider
+
+== Initialization ==
+User -> browser : Select Item & Checkout
+browser -> merchant : Initiate Purchase
+merchant -> pay : POST /Payment/init
+note over pay,fraud: Fraud Risk Evaluation
+pay -> fraud: Fraud Risk Check Service
+alt
+pay <-- fraud: 200 OK: SUCCESS
+else
+
+end
+pay -> provider : Request Provider Init
+provider --> pay : Return redirect_url: "https://provider.com/pay"
+pay --> merchant : 200 OK (XML Response with redirectUrl)
+note right
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<initResult>
+    <redirectUrl>https://provider.com/pay</redirectUrl>
+    <resultCode>0</resultCode>
+    <txnId>7712376985402148501</txnId>
+</initResult>
+end note
+
+== User Payment Process ==
+merchant -[#red]> browser : Redirect User to Provider URL <b>[https://provider.com/pay]</b>
+User -[#red]> browser : Enter credentials / Authorize
+browser -[#red]> provider : Confirm Payment
+  == Return Flow & Backend Notification ==
+group #E8F5E9 Return to Coda
+    provider -> browser : Redirect to Coda's return_url (Landing back on CODA PAY)
+    browser -> pay : HTTP 302: Redirect to vue3 <b>[https://airtime-sgp.codapayments.com/airtime/web-app/begin?txn_id=123]
+    pay -> browser : Display Result Page "Payment Successful" OR "Fail"
+end
+
+group #FFECB3 Async Backend Notification
+    provider -> pay : Webhook (Async Payment Confirmation)
+    pay -> merchant : Send Notification Callback (Server-to-Server)
+end
+
+@enduml
