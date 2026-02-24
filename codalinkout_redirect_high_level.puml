@@ -1,51 +1,68 @@
 @startuml
 autonumber
-title Skip Checkout Page - Redirect High Level
+title Skip Checkout Page - Redirect High Level (Grouped Fraud)
 
 actor User
 participant "Browser/App" as browser
 participant "Merchant Server" as merchant
-participant "Codapay" as pay
-participant "Fraud Service" as fraud
-participant "Payment Provider" as provider
+participant "Codapay" as pay #LightBlue
+participant "Fraud Service" as fraud #LavenderBlush
+participant "Payment Provider" as provider #HoneyDew
 
 == Initialization ==
 User -> browser : Select Item & Checkout
 browser -> merchant : Initiate Purchase
-merchant -> pay : POST /Payment/init
-note over pay,fraud: Fraud Risk Evaluation
-pay -> fraud: Fraud Risk Check Service
-alt
-pay <-- fraud: 200 OK: SUCCESS
-else
+merchant -> pay : POST airtime/api/restful/v1.0/Payment/init
 
+group #FFF0F0 Fraud Validation Phase
+    pay -> fraud: Fraud Risk Check Service
+    alt #HoneyDew Success: No Risk
+        fraud --> pay: {\n fraud_score: 6,\nfraud_score_desc: "SUCCESS",\nstatus_code:200}
+    else #Pink Failure: High Risk
+        break Transaction Terminated
+        fraud --> pay: {\n fraud_score: 1,\nfraud_score_desc: "BLOCKED",\nstatus_code:200\ndetail_result_code:316\n}
+                pay -> merchant: Return Result Code: 319 (Fraud)
+                note right
+                <font color=red><b>Failure Payload</b></font>
+                <initResult>
+                    <txnId>7718597931388150786</txnId>
+                    <resultCode>316</resultCode>
+                    <desc>fraud</desc>
+                </initResult>
+                end note
+        end
+    end
 end
+
 pay -> provider : Request Provider Init
-provider --> pay : Return redirect_url: "https://provider.com/pay"
-pay --> merchant : 200 OK (XML Response with redirectUrl)
+provider --> pay : Return redirect_url
+pay --> merchant : 200 OK (XML Response)
+
 note right
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<font color=blue><b>Success Payload</b></font>
 <initResult>
+   <txnId>7712376985402148501</txnId>
     <redirectUrl>https://provider.com/pay</redirectUrl>
     <resultCode>0</resultCode>
-    <txnId>7712376985402148501</txnId>
 </initResult>
 end note
 
 == User Payment Process ==
-merchant -[#red]> browser : Redirect User to Provider URL <b>[https://provider.com/pay]</b>
+merchant -[#red]> browser : Redirect User to Provider URL
 User -[#red]> browser : Enter credentials / Authorize
-browser -[#red]> provider : Confirm Payment
-  == Return Flow & Backend Notification ==
+browser -[#red]> provider : Complete Payment..
+
+== Return Flow & Backend Notification ==
 group #E8F5E9 Return to Coda
-    provider -> browser : Redirect to Coda's return_url (Landing back on CODA PAY)
-    browser -> pay : HTTP 302: Redirect to vue3 <b>[https://airtime-sgp.codapayments.com/airtime/web-app/begin?txn_id=123]
-    pay -> browser : Display Result Page "Payment Successful" OR "Fail"
+    provider -> browser : Redirect to Coda's return_url
+    browser -> pay : HTTP 302: Redirect to Web App
+    pay -> browser : Display Payment Process Result ("Success" OR "Fail")
 end
 
 group #FFECB3 Async Backend Notification
-    provider -> pay : Webhook (Async Payment Confirmation)
-    pay -> merchant : Send Notification Callback (Server-to-Server)
+    provider -> pay : Notify Payment Process Result (Async Confirmation)
+    pay -> merchant : Notify Transaction Status
+    merchant -> User : Deliver Item to Shopper
 end
 
 @enduml
