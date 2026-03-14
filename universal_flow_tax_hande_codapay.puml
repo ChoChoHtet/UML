@@ -1,0 +1,120 @@
+@startuml
+autonumber
+skinparam style strictuml
+skinparam SequenceMessageAlignment center
+skinparam shadowing false
+skinparam MaxMessageSize 250
+
+title  End-to-End Universal Flow Tax Update (Tax-Exclusive Base Price Flow)
+
+box "External / Client" #FDFEFE
+participant "Supplier" as supplier #34495E
+participant "Browser" as browser
+end box
+
+box "Coda Backend" #EDBB99
+participant "Airtime" as airtime #AED6F1
+participant "Airbag" as airbag #F9E79F
+participant "Raison" as raison #FAD7A0
+end box
+
+box "Checkout Services" #D5F5E3
+participant "Hosted Checkout\n(Vue3)" as hc
+end box
+
+== Transaction Initialization Phase ==
+
+supplier -> airtime: POST /Payment/Init
+activate airtime
+airtime -> airbag: EPCInitTxn.init()
+activate airbag
+
+group #F2F2F2 EPCInitTxn Core Logic
+    note over airbag : **1. Foreign Currency Conversion**
+        alt Currency mismatch detected (Transaction: USD ≠ Merchant:CAD)
+            airbag -> airbag: Convert USD to Local Currency (CAD)
+            note right #FF9999: **ADJUST TOTAL PRICE**: \nBased on FX Rate )
+        else No conversion required
+            note over airbag : Continue with original currency
+        end
+    note over airbag : **2. Conditional Price Revision**
+        alt Surcharge or Discount Configured for Merchant/Channel
+            airbag -> airbag: SurchargeDiscountManager.revisePrice()
+            note right #FF9999: **ADJUST TOTAL PRICE**: \nApply Surcharge/Discount
+        end
+
+    group #E8F5E9 **ASYNC FLOW**: InitializeHC
+            airbag -> airbag: Fetch HCTemplate from PCConfigCache
+
+            note over airbag : **CODASHOP Tax Validation**
+            alt #FCF3CF Tax/Tax_Rate present AND region is USA/CA
+                airbag -> airbag: Remove **PreparePaymentForm** from HCTemplate
+            else Standard Flow
+                airbag -> airbag: Maintain original HCTemplate
+            end
+
+            airbag -> airbag: **SET TAXABLE_AMOUNT**
+            note right #00BFFF: **CORE VALUE**: Taxable Amount =\n(Base Price +/- Surcharge/Discount)
+
+            note over airbag : **3. Server Action Processing**
+            alt DEFAULT_PREPARE_PAYMENT_INFO (CA)
+                airbag -> airbag: Cards CA Tax Calculation (Default State)
+                note right #FF9999: **ADJUST TOTAL PRICE**: \nTax % applied to **TAXABLE_AMOUNT**
+            else CLIENT_IP_ZIP_CODE_BASED_TAX_ADD (US)
+                airbag -> airbag: Cards US Tax Calculation (IP/Zip detection)
+                note right #FF9999: **ADJUST TOTAL PRICE**: \nTax % applied to **TAXABLE_AMOUNT**
+            else CREATE_PAYMENT
+                airbag -> raison : Payment Gateway Init (twnGw.init)
+                airbag <-- raison : 200: OK
+            end
+        end
+end
+
+airbag --> airtime: Return Init Result
+deactivate airbag
+airtime --> supplier: 200 OK
+deactivate airtime
+
+== Redirection & UI Rendering ==
+
+supplier -> browser: Redirect to Airtime URL
+browser -> airtime: GET /airtime/begin
+airtime -> hc: HTTP 302: Redirect to Vue3 App
+
+group #FCF3CF HC Template Evaluation (Client Side)
+    note over hc: Displays Price based on initial **TAXABLE_AMOUNT** + Tax
+    alt PreparePaymentForm is NULL
+        hc -> browser: Render Checkout (No Billing Info)
+        note right: Recalculation not possible (Form disabled)
+    else **Form Required (Billing Fields Visible)**
+        hc -> browser: Render Checkout with Prefilled Billing & Tax
+
+        == Manually ZIP or State Change (Form Flow Only) ==
+        browser -> hc : User updates ZIP/State
+        activate hc
+        note over airtime,hc : **DYNAMIC RECALCULATION** triggered via Vue3
+        hc -> airtime: POST /prepare_payment?isUpdateTax=true
+        activate airtime
+
+        airtime -> airbag: Calculate Tax based on new ZIP/State
+        activate airbag
+        note over airbag #00BFFF: Pulls **Tax-Exclusive Base Price** \n(TAXABLE_AMOUNT)
+        airbag -> airbag: Update TotalPrice (Base + New Tax)
+        note right #FF9999: **ADJUST TOTAL PRICE**
+        airbag -> airbag: Save Update to DB
+        airbag --> airtime: 200: OK
+        deactivate airbag
+
+        airtime --> hc: Return Updated Price
+        deactivate airtime
+        hc -> browser: Display Updated Price
+        deactivate hc
+    end
+end
+
+== Payment Finalization ==
+
+browser -> hc: Enter Payment Details & Submit
+hc -> browser: Display Result Page
+
+@enduml
